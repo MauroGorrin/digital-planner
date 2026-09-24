@@ -102,6 +102,55 @@ El payload incluye: id de la pieza, cliente, título, estado, fecha/hora, plataf
 7. Como agencia, arrastra la pieza a otra fecha en el calendario mensual → confirma que la hora se mantiene en la zona horaria del cliente y que el evento de Google Calendar se actualiza sin duplicarse (`fecha_cambiada`).
 8. Marca la pieza como **Programado** y luego **Publicado**, revisando en cada paso el historial de la ficha y, si hay un webhook de prueba (p. ej. https://webhook.site), que cada evento llegó firmado.
 
+## Pruebas
+
+| Comando | Qué corre |
+|---|---|
+| `npm run test` | Pruebas unitarias (Vitest + jsdom) sobre `tests/unit/**`: firma HMAC de webhooks, fecha/hora con zona horaria, y el upsert-sin-duplicado de Google Calendar. |
+| `npm run test:watch` | Lo mismo, en modo watch. |
+| `npm run test:coverage` | Lo mismo, con reporte de cobertura en `coverage/` (no se versiona). |
+| `npm run test:integration` | Levanta una Supabase local en Docker, reaplica las migraciones desde cero y ejercita las funciones `SECURITY DEFINER` de transición de estado contra Postgres real. |
+| `npm run db:test:stop` | Apaga la Supabase local. |
+
+Las pruebas de integración necesitan Docker corriendo. Nunca tocan un proyecto de Supabase remoto:
+las credenciales salen de `supabase status` en tiempo de ejecución y aterrizan en `.env.test.local`,
+que está fuera de control de versiones.
+
+## CI
+
+`.github/workflows/ci.yml` corre en cada `push` a `main`/`master` y en cada `pull_request`, sobre
+Node 22: `npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm run test` → `npm run test:integration`
+→ `npm run build`.
+
+El check que aparece en la UI de branch protection de GitHub se llama **`CI / test`** (workflow `CI`,
+job `test`). Es el mismo conjunto de comandos que el gate local, sin excepciones: si algo está en el
+gate, está en CI.
+
+## Despliegue en Vercel
+
+El despliegue va por la integración Git de Vercel: cada push a `main` dispara un deploy de
+producción, y un rollback es "Promote to Production" sobre un deployment anterior.
+
+**Versión de Node del proyecto: `22.x`.** Se fija en Vercel en *Project Settings → General →
+Node.js Version*, y `package.json` → `engines.node` lo documenta. Vercel deshabilita Node 20 para
+despliegues nuevos a partir del **2026-10-01**, así que este ajuste no es opcional.
+
+Variables de entorno a cargar en el dashboard de Vercel (las mismas 7 de `.env.example`):
+
+| Variable | Secreta | Dónde se consigue |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | no | Supabase → Settings → API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | no | Supabase → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | **sí** | Supabase → Settings → API (nunca llega al navegador) |
+| `NEXT_PUBLIC_APP_URL` | no | El dominio de producción del proyecto |
+| `GOOGLE_CLIENT_ID` | no | Google Cloud Console (solo si se usa Google Calendar) |
+| `GOOGLE_CLIENT_SECRET` | **sí** | Google Cloud Console |
+| `GOOGLE_REDIRECT_URI` | no | `https://<tu-dominio>/api/google-calendar/callback` |
+
+`middleware.ts` construye un cliente de Supabase en cada request, así que sin
+`NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` la aplicación responde 500 en todas
+las rutas, incluida `/login`. Verifica que las 7 estén cargadas antes del primer deploy.
+
 ## Estructura del proyecto
 
 ```

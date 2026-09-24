@@ -468,9 +468,22 @@ Sube `@types/node` de `^20.14.2` a `^22` (`npm install -D @types/node@^22`). Agr
 lee para elegir la versión mayor de Node (§12), y documenta el mismo requisito que
 `actions/setup-node` impone en CI (Paso 8). Agrega el script `"typecheck": "tsc --noEmit"` —
 el proyecto no tenía ninguno; todos los pasos siguientes y el gate global (§20.1) lo usan. Agrega
-`"blueprints"` al array `exclude` de `tsconfig.json` (hoy solo `["node_modules"]`) — el bundle en
-`blueprints/digital-planner/workspace/` trae archivos `.ts` que el `include: ["**/*.ts", ...]` por
-defecto de `tsc` tipificaría como una segunda copia redundante si no se excluye.
+`"blueprints"`, `"vitest.config.ts"` y `"vitest.setup.ts"` al array `exclude` de `tsconfig.json`
+(hoy solo `["node_modules"]`).
+
+Las tres exclusiones tienen razones distintas y ambas fueron confirmadas ejecutando este paso en
+vivo (2026-09-24):
+
+- `"blueprints"` — el bundle en `blueprints/digital-planner/workspace/` trae archivos `.ts` que el
+  `include: ["**/*.ts", ...]` por defecto de `tsc` tipificaría como una segunda copia redundante.
+- `"vitest.config.ts"` y `"vitest.setup.ts"` — Bootstrap (§10) los deposita en la raíz **antes**
+  que este paso, pero los paquetes que importan (`@vitejs/plugin-react`, `vitest/config`,
+  `@testing-library/jest-dom`) no se instalan hasta el Paso 3. Sin esta exclusión,
+  `npm run typecheck` falla aquí con `TS2307: Cannot find module` sobre archivos que este paso no
+  escribió — un gate roto por el orden del build, no por el trabajo del paso. Excluirlos es además
+  lo correcto de forma permanente: son configuración de herramienta que Vite transpila por su
+  cuenta, no código de aplicación, y el `tsc --noEmit` de la app no debe depender de
+  devDependencies de pruebas.
 
 **Done when**
 - [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare `"@types/node"` matching `^22`
@@ -478,7 +491,8 @@ defecto de `tsc` tipificaría como una segunda copia redundante si no se excluye
 - [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare `"engines": { "node": "22.x" }`.
 - [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare a `"typecheck"` script equal to
       `"tsc --noEmit"`.
-- [ ] WHEN `tsconfig.json`'s `exclude` array is inspected THE SYSTEM SHALL contain `"blueprints"`.
+- [ ] WHEN `tsconfig.json`'s `exclude` array is inspected THE SYSTEM SHALL contain `"blueprints"`,
+      `"vitest.config.ts"` and `"vitest.setup.ts"`.
 - [ ] WHEN `npm run typecheck` runs THE SYSTEM SHALL exit 0 against the existing, untouched
       application code.
 
@@ -493,7 +507,7 @@ node -e "const p=require('./package.json'); if(p.engines?.node !== '22.x') proce
 node -e "const p=require('./package.json'); if(p.scripts?.typecheck !== 'tsc --noEmit') process.exit(1)"
 # expect: exit 0
 
-node -e "const t=require('./tsconfig.json'); if(!t.exclude.includes('blueprints')) process.exit(1)"
+node -e "const t=require('./tsconfig.json'); for(const x of ['blueprints','vitest.config.ts','vitest.setup.ts']) if(!t.exclude.includes(x)) process.exit(1)"
 # expect: exit 0
 
 npm run typecheck
@@ -570,9 +584,23 @@ aritmética trivial, y una segunda que renderiza un elemento mínimo con `render
 de `@testing-library/jest-dom` — esto prueba que todo el toolchain está conectado, no solo
 instalado.
 
+Agrega `/coverage` a `.gitignore` (bajo el bloque `# production`). Es la única edición a
+`.gitignore` de todo este blueprint (§10): `test:coverage` escribe un reporte HTML completo ahí,
+ningún patrón existente lo atrapa, y el `git add -A` del Checkpoint de abajo lo commitearía entero.
+
+Crea `tests/vitest.d.ts` con una sola línea, `import '@testing-library/jest-dom/vitest';`. Es la
+contraparte obligatoria de la exclusión que hace el Paso 1: al sacar `vitest.setup.ts` del programa
+de TypeScript, también sale la augmentación de tipos de los matchers, y `npm run typecheck` falla
+con `Property 'toBeInTheDocument' does not exist on type 'Assertion<...>'` en cuanto alguna prueba
+la usa. Este archivo la devuelve sin volver a meter la config de Vitest al typecheck. Hallazgo del
+gate de aceptación de este epic, ejecutado en vivo (2026-09-24).
+
 **Done when**
 - [ ] WHEN `npm run test` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed
       tests, 0 failed, 0 skipped.
+- [ ] WHEN `git check-ignore -q coverage` runs after `npm run test:coverage` has written the
+      report THE SYSTEM SHALL exit 0, proving the generated coverage output is excluded from
+      version control.
 - [ ] WHEN the second smoke assertion renders a component with `@testing-library/react`'s
       `render()` THE SYSTEM SHALL find it via `screen.getByText` and assert it with
       `@testing-library/jest-dom`'s `toBeInTheDocument()`, proving the full toolchain (Vitest,
@@ -591,6 +619,9 @@ npm run test:coverage
 # expect: exit 0
 test -f coverage/index.html
 # expect: exit 0
+
+git check-ignore -q coverage
+# expect: exit 0 — the generated report is gitignored, not committed
 
 node -e "const p=require('./package.json'); if(!/\^5\.0\.1/.test(p.devDependencies.vitest)) process.exit(1)"
 # expect: exit 0
@@ -1051,8 +1082,19 @@ validación de entorno (regla 9 de §9).
 `.env`, `.env.local`, `.env*.local`, `.DS_Store`, `*.pem`, `npm-debug.log*`, `*.tsbuildinfo`,
 `next-env.d.ts`): ninguno de los archivos de esta tabla coincide con ninguno de esos patrones.
 `.env.test.local` (generado por el Paso 6, nunca commiteado) SÍ coincide con `.env*.local` —
-correctamente, porque es justo el archivo que debe quedar fuera. **No se necesita ninguna edición
-al `.gitignore` existente en todo este blueprint.**
+correctamente, porque es justo el archivo que debe quedar fuera. Lo mismo para `.env.local`
+(generado por el Paso 10), que coincide con dos patrones existentes.
+
+**Este blueprint necesita tres líneas nuevas en `.gitignore`, repartidas entre dos pasos.** Ambas
+ediciones salieron de ejecutar esos pasos en vivo (2026-09-24), no de leer el repo:
+
+| Línea | La agrega | Por qué |
+|---|---|---|
+| `/coverage` | Paso 3 | El script `test:coverage` escribe un reporte HTML completo ahí; ningún patrón existente lo atrapa y el `git add -A` del Checkpoint de ese mismo paso lo commitearía entero. |
+| `supabase/.temp/` | Paso 6 | `supabase start` genera ahí `start-secrets/**/docker.env` con las llaves de la instancia local. Un archivo `.env` versionado es inaceptable aunque sus valores sean las llaves demo públicas de Supabase local. |
+| `supabase/.branches/` | Paso 6 | Mismo origen: estado efímero que el CLI escribe al arrancar. |
+
+Ninguna otra edición al `.gitignore` hace falta en ningún otro paso.
 
 ### Bootstrap
 
@@ -1069,8 +1111,15 @@ git log -1 >/dev/null 2>&1 || git commit -m "chore: scaffold" --allow-empty
 #    re-correr. Nunca sobreescribe en una segunda corrida: package.json, package-lock.json,
 #    tsconfig.json, .eslintrc.json, README.md (todos editados por pasos posteriores; la copia
 #    jamás debe revertir su contenido agregado por un paso).
-rsync -a --ignore-existing blueprints/digital-planner/workspace/ ./
-# skips existing files, exits 0 either way
+#
+#    Se hace con Node y no con `rsync` ni `cp -Rn`, por dos razones encontradas ejecutando este
+#    bloque en vivo (2026-09-24): `rsync` no existe en Windows/Git Bash, y `cp -Rn` sale 1 en
+#    BSD/macOS cuando omite correctamente un archivo existente (sale 0 en GNU) — es decir, la
+#    segunda corrida de Bootstrap abortaría en una plataforma y no en la otra. Node ya es un
+#    prerrequisito duro de este proyecto (§10), copia igual en las tres plataformas, nunca
+#    sobreescribe, y siempre sale 0.
+node -e "const fs=require('fs'),p=require('path');const src='blueprints/digital-planner/workspace';const walk=(d,t)=>{for(const e of fs.readdirSync(d,{withFileTypes:true})){const s=p.join(d,e.name),x=p.join(t,e.name);if(e.isDirectory()){fs.mkdirSync(x,{recursive:true});walk(s,x);}else if(!fs.existsSync(x)){fs.copyFileSync(s,x);}}};walk(src,'.');"
+# skips existing files, exits 0 either way, identical on Windows/macOS/Linux
 
 # 2. Instalación baseline contra el lockfile EXISTENTE, sin modificar — prueba que la app actual
 #    sigue instalando y construyendo tal cual, antes de cualquier cambio de tooling. Desde el
@@ -1087,8 +1136,8 @@ git commit -m "chore: apply blueprint workspace (test tooling, CI, agent config)
 ```
 
 Cada comando de arriba es seguro de correr dos veces: `git rev-parse`/`git log -1` son chequeos
-idempotentes con `||`, `rsync --ignore-existing` nunca sobreescribe y sale con 0 tanto si copió
-algo como si no copió nada, `npm install` contra un lockfile ya instalado es un no-op rápido, y el
+idempotentes con `||`, la copia en Node nunca sobreescribe y sale con 0 tanto si copió algo como si
+no copió nada, `npm install` contra un lockfile ya instalado es un no-op rápido, y el
 `git commit --allow-empty` final no falla si no hay nada nuevo que commitear. Ninguno abre un
 prompt interactivo.
 
@@ -1678,9 +1727,9 @@ Más estas compuertas manuales, cada una revisada una vez antes de considerar el
       por ruta), y `git check-ignore -q <ruta>; test $? -eq 1` sale 0 para cada uno (probando que
       ningún patrón del `.gitignore` lo atrapa — nunca `! git check-ignore -q a b`, que saldría 128
       por uso incorrecto con dos rutas, no por la propiedad real).
-- [ ] El `.gitignore` no fue tocado por ningún paso de §9 — confirmado: `git log --diff-filter=M
-      --format=%H -- .gitignore` no lista ningún commit de los Pasos 1–10 (era innecesario, §10 lo
-      explica).
+- [ ] El `.gitignore` fue tocado por exactamente un paso de §9 — el Paso 3, que agrega `/coverage`
+      (ver §10). `git check-ignore -q coverage; test $? -eq 0` sale 0, y ningún otro paso lo
+      modificó.
 - [ ] `npm ci` fue re-corrido una vez sobre un árbol ya bootstrapeado (`git status --porcelain`
       antes y después no cambia nada relevante), y la copia guardada de `workspace/` (§10, `rsync
       --ignore-existing`) fue re-corrida una vez y salió 0 sin revertir ningún archivo editado por

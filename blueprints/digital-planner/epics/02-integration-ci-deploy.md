@@ -103,8 +103,7 @@ None new. `E2-T1`'s integration test writes real rows through the existing schem
   contain. See `.claude/rules/tests.md`.
 - **Local Supabase credentials are never hardcoded.** `scripts/write-supabase-test-env.mjs` reads
   them from `npx supabase status -o json` at run time and writes `.env.test.local`, which is
-  already excluded by the repo's existing `.gitignore` pattern `.env*.local` — no `.gitignore` edit
-  is needed anywhere in this epic. If the JSON key names your installed CLI version prints differ
+  already excluded by the repo's existing `.gitignore` pattern `.env*.local`. If the JSON key names your installed CLI version prints differ
   from `API_URL` / `ANON_KEY` / `SERVICE_ROLE_KEY`, run `npx supabase status -o json` once by hand
   and adjust the script's property names — never fall back to a hardcoded credential.
 - **`npm run test:integration` runs `supabase start && supabase db reset && ...` every time.** This
@@ -118,6 +117,12 @@ None new. `E2-T1`'s integration test writes real rows through the existing schem
 - **`E2-T4` touches zero files.** It is a pure verification task confirming the agent workspace
   Bootstrap copied (`CLAUDE.md`, `AGENTS.md`, `.claude/`) landed correctly. An empty `files` array
   in `tasks.json` is correct here, not a mistake.
+- **`supabase start` writes generated state into the repo, and `E2-T1` must gitignore it.**
+  `supabase/.temp/` holds `start-secrets/**/docker.env` with the local instance's keys, and
+  `supabase/.branches/` holds the current-branch marker. Neither is covered by any pre-existing
+  pattern, and `E2-T1`'s own `git add -A` checkpoint commits both if you skip this. Found by
+  running the task live — the commit landed before the pattern did, and had to be undone with
+  `git rm -r --cached supabase/.temp`.
 
 Full project rules: `CLAUDE.md`. Area rules: `.claude/rules/tests.md`. Both sit in the project
 root — the builder copied them there from the bundle's `workspace/` before task one.
@@ -169,6 +174,7 @@ runtime dependency — no new package needed for the client itself):
 - `package-lock.json` — edit
 - `scripts/write-supabase-test-env.mjs` — new
 - `tests/integration/state-transitions.test.ts` — new
+- `.gitignore` — edit: add `supabase/.temp/` and `supabase/.branches/`, both written by `supabase start`
 
 **Acceptance**
 

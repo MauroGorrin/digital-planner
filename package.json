@@ -2,11 +2,20 @@
   "name": "digital-planner",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests/unit",
+    "test:watch": "vitest tests/unit",
+    "test:coverage": "vitest run tests/unit --coverage",
+    "test:integration": "npx supabase start && npx supabase db reset && node scripts/write-supabase-test-env.mjs && vitest run tests/integration --environment node",
+    "db:test:stop": "npx supabase stop"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
@@ -18,12 +27,22 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@types/node": "^20.14.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^22.20.4",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "5.0.1",
     "autoprefixer": "^10.4.19",
+    "eslint": "^8.57.1",
+    "eslint-config-next": "14.2.35",
+    "jsdom": "^30.1.1",
     "postcss": "^8.5.28",
+    "supabase": "2.117.0",
     "tailwindcss": "^3.4.4",
-    "typescript": "^5.5.2"
+    "typescript": "^5.5.2",
+    "vite": "^8.3.1",
+    "vitest": "^5.0.1"
   }
 }

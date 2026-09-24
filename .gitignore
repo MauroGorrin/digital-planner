@@ -8,6 +8,14 @@
 # production
 /build
 
+# test coverage (generado por `npm run test:coverage`)
+/coverage
+
+# estado efímero del CLI de Supabase (generado por `supabase start`).
+# .temp incluye start-secrets/**/docker.env con las llaves de la instancia local: nunca se versiona.
+supabase/.temp/
+supabase/.branches/
+
 # env
 .env
 .env.local

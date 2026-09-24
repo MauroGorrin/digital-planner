@@ -135,10 +135,18 @@ Bump `@types/node` to `^22` (`npm install -D @types/node@^22`). Add `"engines": 
 to `package.json` — this is what Vercel's build platform reads to select the Node major (see
 `blueprint.md` §12), and it documents the same requirement `actions/setup-node` enforces in CI. Add
 a `"typecheck": "tsc --noEmit"` script — the project had none; every later task's Verify and the
-global gate use it. Add `"blueprints"` to `tsconfig.json`'s `exclude` array (currently
-`["node_modules"]` only) — the bundle at `blueprints/digital-planner/workspace/` ships `.ts` files
-that `tsc`'s default `include: ["**/*.ts", ...]` would otherwise type-check as a redundant second
-copy.
+global gate use it. Add `"blueprints"`, `"vitest.config.ts"` and `"vitest.setup.ts"` to
+`tsconfig.json`'s `exclude` array (currently `["node_modules"]` only).
+
+Two distinct reasons, both confirmed by running this step live:
+- `"blueprints"` — the bundle at `blueprints/digital-planner/workspace/` ships `.ts` files that
+  `tsc`'s default `include: ["**/*.ts", ...]` would otherwise type-check as a redundant second copy.
+- `"vitest.config.ts"` / `"vitest.setup.ts"` — Bootstrap drops them at the project root *before*
+  this task, but the packages they import (`@vitejs/plugin-react`, `vitest/config`,
+  `@testing-library/jest-dom`) do not arrive until `E1-T3`. Without the exclusion this task's own
+  `npm run typecheck` gate fails with `TS2307: Cannot find module` on files it never wrote. They
+  also belong outside the app typecheck permanently: Vite transpiles them itself, and the app's
+  `tsc --noEmit` should not depend on test devDependencies.
 
 **Files**
 - `package.json` — edit: bump `@types/node`, add `engines`, add `typecheck` script
@@ -154,7 +162,9 @@ copy.
 3. **WHEN** `package.json` is inspected **THE SYSTEM SHALL** declare a `"typecheck"` script equal
    to `"tsc --noEmit"`.
 4. **WHEN** `tsconfig.json`'s `exclude` array is inspected **THE SYSTEM SHALL** contain
-   `"blueprints"`.
+   `"blueprints"`, `"vitest.config.ts"` and `"vitest.setup.ts"` — the latter two because Bootstrap
+   places them at the project root before this step while the packages they import are not
+   installed until `E1-T3`.
 5. **WHEN** `npm run typecheck` runs **THE SYSTEM SHALL** exit 0 against the existing, untouched
    application code.
 
@@ -164,7 +174,7 @@ copy.
 node -e "const p=require('./package.json'); if(!/\^22/.test(p.devDependencies['@types/node'])) process.exit(1)"
 node -e "const p=require('./package.json'); if(p.engines?.node !== '22.x') process.exit(1)"
 node -e "const p=require('./package.json'); if(p.scripts?.typecheck !== 'tsc --noEmit') process.exit(1)"
-node -e "const t=require('./tsconfig.json'); if(!t.exclude.includes('blueprints')) process.exit(1)"
+node -e "const t=require('./tsconfig.json'); for(const x of ['blueprints','vitest.config.ts','vitest.setup.ts']) if(!t.exclude.includes(x)) process.exit(1)"
 npm run typecheck
 ```
 
@@ -237,10 +247,23 @@ that renders a minimal element with `@testing-library/react`'s `render()`, queri
 `screen.getByText`, and asserts with `@testing-library/jest-dom`'s `toBeInTheDocument()` — this
 proves the whole toolchain is wired together, not merely installed.
 
+Add `/coverage` to `.gitignore`, under the `# production` block. This is the only `.gitignore`
+edit in the whole blueprint: `test:coverage` writes a full HTML report there, no existing pattern
+catches it, and this task's own `git add -A` checkpoint would otherwise commit all of it.
+
+Create `tests/vitest.d.ts` containing the single line
+`import '@testing-library/jest-dom/vitest';`. This is the mandatory counterpart to `E1-T1`'s
+tsconfig exclusion: dropping `vitest.setup.ts` from the TypeScript program also drops the matcher
+type augmentation, and `npm run typecheck` then fails with `Property 'toBeInTheDocument' does not
+exist on type 'Assertion<...>'` as soon as any test uses it. Found by this epic's own acceptance
+gate, run live.
+
 **Files**
 - `package.json` — edit: devDependencies + 3 scripts
 - `package-lock.json` — edit
 - `tests/unit/smoke.test.tsx` — new
+- `tests/vitest.d.ts` — new
+- `.gitignore` — edit: add `/coverage`
 
 **Acceptance**
 
@@ -255,6 +278,9 @@ proves the whole toolchain is wired together, not merely installed.
    `coverage/index.html`.
 4. **WHEN** `package.json`'s `devDependencies` are inspected **THE SYSTEM SHALL** declare `vitest`
    matching `^5.0.1` and `@vitest/coverage-v8` at exactly `5.0.1`.
+5. **WHEN** `git check-ignore -q coverage` runs after `npm run test:coverage` has written the
+   report **THE SYSTEM SHALL** exit 0, proving the generated coverage output is excluded from
+   version control.
 
 **Verify**
 
@@ -262,6 +288,7 @@ proves the whole toolchain is wired together, not merely installed.
 npm run test
 npm run test:coverage
 test -f coverage/index.html
+git check-ignore -q coverage
 node -e "const p=require('./package.json'); if(!/\^5\.0\.1/.test(p.devDependencies.vitest)) process.exit(1)"
 node -e "const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.1') process.exit(1)"
 ```
