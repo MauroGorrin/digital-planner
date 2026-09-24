@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm run test\\:watch:*)",
+      "Bash(npm run test\\:coverage:*)",
+      "Bash(npm run test\\:integration:*)",
+      "Bash(npm run db\\:test\\:stop:*)",
+      "Bash(npm start:*)",
+      "Bash(npx tsc --noEmit:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npx supabase:*)",
+      "Bash(node scripts/write-supabase-test-env.mjs:*)",
+      "Bash(node -e*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git tag:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git init:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(rsync:*)",
+      "Bash(curl -s -o /dev/null*)",
+      "Bash(grep:*)",
+      "Bash(test -f*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.*.local)",
+      "Bash(git push:*)",
+      "Bash(git push --force:*)",
+      "Bash(npx supabase db push:*)",
+      "Bash(npx supabase link:*)"
+    ]
+  }
+}

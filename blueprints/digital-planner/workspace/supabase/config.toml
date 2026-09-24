@@ -1,0 +1,39 @@
+# Config mínima de Supabase CLI para desarrollo/pruebas locales.
+# Suficiente para `supabase start` + `supabase db reset` (aplica supabase/migrations/*.sql).
+# No se habilita ningún servicio más allá de lo necesario para correr las migraciones
+# y las Server Actions/rutas que las consumen (Auth + Postgres + Storage + API REST).
+
+project_id = "digital-planner"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[inbucket]
+enabled = false
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"

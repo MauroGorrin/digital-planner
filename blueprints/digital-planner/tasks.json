@@ -1,0 +1,242 @@
+[
+  {
+    "id": "E1-T1",
+    "title": "Bump Node target to 22 and add typecheck script",
+    "epic": "01-toolchain-and-unit-tests",
+    "dependencies": [],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `package.json` is inspected THE SYSTEM SHALL declare `\"@types/node\"` matching `^22` under `devDependencies`.",
+      "WHEN `package.json` is inspected THE SYSTEM SHALL declare `\"engines\": { \"node\": \"22.x\" }`.",
+      "WHEN `package.json` is inspected THE SYSTEM SHALL declare a `\"typecheck\"` script equal to `\"tsc --noEmit\"`.",
+      "WHEN `tsconfig.json`'s `exclude` array is inspected THE SYSTEM SHALL contain `\"blueprints\"`.",
+      "WHEN `npm run typecheck` runs THE SYSTEM SHALL exit 0 against the existing, untouched application code."
+    ],
+    "verify": [
+      "node -e \"const p=require('./package.json'); if(!/\\^22/.test(p.devDependencies['@types/node'])) process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(p.engines?.node !== '22.x') process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(p.scripts?.typecheck !== 'tsc --noEmit') process.exit(1)\"",
+      "node -e \"const t=require('./tsconfig.json'); if(!t.exclude.includes('blueprints')) process.exit(1)\"",
+      "npm run typecheck"
+    ],
+    "checkpoint": "step-01-node22-target",
+    "files": ["package.json", "package-lock.json", "tsconfig.json"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T2",
+    "title": "Configure ESLint so npm run lint stops needing an interactive prompt",
+    "epic": "01-toolchain-and-unit-tests",
+    "dependencies": ["E1-T1"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `npm run lint` runs THE SYSTEM SHALL exit 0.",
+      "WHEN `.eslintrc.json` is inspected THE SYSTEM SHALL declare `\"ignorePatterns\"` including `\"blueprints/**\"`.",
+      "WHEN `.eslintrc.json` is inspected THE SYSTEM SHALL declare `\"extends\": \"next/core-web-vitals\"`.",
+      "WHEN `package.json` is inspected THE SYSTEM SHALL declare `eslint-config-next` at exactly `14.2.35` under `devDependencies`."
+    ],
+    "verify": [
+      "npm run lint",
+      "node -e \"const c=require('./.eslintrc.json'); if(!c.ignorePatterns.includes('blueprints/**')) process.exit(1)\"",
+      "node -e \"const c=require('./.eslintrc.json'); if(c.extends !== 'next/core-web-vitals') process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(p.devDependencies['eslint-config-next'] !== '14.2.35') process.exit(1)\""
+    ],
+    "checkpoint": "step-02-eslint-config",
+    "files": ["package.json", "package-lock.json", ".eslintrc.json"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T3",
+    "title": "Add Vitest + jsdom + Testing Library toolchain",
+    "epic": "01-toolchain-and-unit-tests",
+    "dependencies": ["E1-T2"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `npm run test` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed tests, 0 failed, 0 skipped.",
+      "WHEN the second smoke assertion renders a component with `@testing-library/react`'s `render()` THE SYSTEM SHALL find it via `screen.getByText` and assert it with `@testing-library/jest-dom`'s `toBeInTheDocument()`, proving the full toolchain (Vitest, @vitejs/plugin-react, jsdom, Testing Library, jest-dom matchers) is wired together, not just jsdom alone.",
+      "WHEN `npm run test:coverage` runs THE SYSTEM SHALL exit 0 and write `coverage/index.html`.",
+      "WHEN `package.json`'s `devDependencies` are inspected THE SYSTEM SHALL declare `vitest` matching `^5.0.1` and `@vitest/coverage-v8` at exactly `5.0.1`."
+    ],
+    "verify": [
+      "npm run test",
+      "npm run test:coverage",
+      "test -f coverage/index.html",
+      "node -e \"const p=require('./package.json'); if(!/\\^5\\.0\\.1/.test(p.devDependencies.vitest)) process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.1') process.exit(1)\""
+    ],
+    "checkpoint": "step-03-vitest-toolchain",
+    "files": ["package.json", "package-lock.json", "tests/unit/smoke.test.tsx"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T4",
+    "title": "Unit tests for webhook HMAC signing (lib/webhooks/dispatch.ts)",
+    "epic": "01-toolchain-and-unit-tests",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `dispatchWebhookEvent` is called with a payload built by `buildWebhookPayload('pieza_aprobada', ...)` and one mocked active webhook config matching that event THE SYSTEM SHALL call `fetch` exactly once with header `X-Planner-Signature` equal to the HMAC-SHA256 hex digest of the exact JSON body, computed independently in the test using the same webhook secret.",
+      "WHEN the same call is made THE SYSTEM SHALL call `fetch` with header `X-Planner-Event` equal to `pieza_aprobada` and header `Content-Type` equal to `application/json`.",
+      "WHEN the mocked `fetch` resolves with `status: 200` THE SYSTEM SHALL insert one mocked `webhook_deliveries` row with `response_status: 200` and `error: null`.",
+      "WHEN a mocked webhook config's `events` array does not include the dispatched event type THE SYSTEM SHALL NOT call `fetch` for that config.",
+      "WHEN the mocked `fetch` rejects with a network error THE SYSTEM SHALL insert a `webhook_deliveries` row with `response_status: null` and `error` equal to the thrown error's message, and SHALL NOT throw out of `dispatchWebhookEvent`."
+    ],
+    "verify": [
+      "npx vitest run tests/unit/webhooks/dispatch.test.ts"
+    ],
+    "checkpoint": "step-04-webhook-hmac-tests",
+    "files": ["tests/unit/webhooks/dispatch.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E1-T5",
+    "title": "Unit tests for timezone-consistent date handling (lib/date-utils.ts, lib/tz.ts)",
+    "epic": "01-toolchain-and-unit-tests",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `getMonthGridRange` is called for a month whose first day is not a Monday THE SYSTEM SHALL return a `start` that is a Monday on or before the 1st and an `end` that is a Sunday on or after the month's last day.",
+      "WHEN `getDaysBetween(start, end)` is called THE SYSTEM SHALL return an array whose length equals the inclusive day count between `start` and `end`.",
+      "WHEN `formatMonthTitle` is called with a `Date` in March THE SYSTEM SHALL return a capitalized Spanish month name and year matching `/^Marzo \\d{4}$/`.",
+      "WHEN `formatTimeInTz` is called with a fixed ISO instant and `'America/Mexico_City'` THE SYSTEM SHALL return that timezone's wall-clock `HH:mm`, not UTC's.",
+      "WHEN `combineDateKeepTime` is called with an original ISO timestamp, a new calendar date string, and a timezone, and the result is re-formatted with `formatDateTimeInTz` in that same timezone THE SYSTEM SHALL round-trip to the same `HH:mm` as the original — proving no timezone drift across the combine operation.",
+      "WHEN `formatTimeInTz` is called with the same ISO instant under two IANA timezones with different UTC offsets at that instant THE SYSTEM SHALL return two different `HH:mm` strings."
+    ],
+    "verify": [
+      "npx vitest run tests/unit/lib/date-utils.test.ts",
+      "npx vitest run tests/unit/lib/tz.test.ts"
+    ],
+    "checkpoint": "step-05-date-tz-tests",
+    "files": ["tests/unit/lib/date-utils.test.ts", "tests/unit/lib/tz.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T1",
+    "title": "Local Supabase integration harness + state-transition test (data-layer gate)",
+    "epic": "02-integration-ci-deploy",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `npm run test:integration` runs against a freshly reset local Supabase THE SYSTEM SHALL apply both `supabase/migrations/0001_init.sql` and `supabase/migrations/0002_storage.sql` with zero errors via `supabase db reset`.",
+      "WHEN the test signs in as the seeded `agency_admin` test user and calls `.rpc('submit_for_review', { p_content_piece_id })` on a `borrador` piece THE SYSTEM SHALL leave exactly one new `status_history` row with `to_status = 'pendiente_revision'` and update `content_pieces.status` to `pendiente_revision`.",
+      "WHEN the test signs in as the seeded client-contact test user (linked via `client_contacts`) and calls `.rpc('approve_content_piece', { p_content_piece_id, p_note })` on that same piece THE SYSTEM SHALL leave exactly one new `status_history` row with `to_status = 'aprobado'`, insert exactly one `approvals` row with `decision = 'aprobado'`, and update `content_pieces.status` to `aprobado`.",
+      "WHEN a signed-in test user who is NOT a client contact of that client calls `.rpc('approve_content_piece', ...)` on the same piece THE SYSTEM SHALL return an error and leave `content_pieces.status` unchanged.",
+      "WHEN the test suite finishes THE SYSTEM SHALL delete every row and test user it created, in an `afterAll`, so `npm run test:integration` is safe to re-run against the same local instance."
+    ],
+    "verify": [
+      "npx supabase start",
+      "npx supabase db reset",
+      "node scripts/write-supabase-test-env.mjs",
+      "npx vitest run tests/integration --environment node",
+      "node -e \"const p=require('./package.json'); if(p.devDependencies.supabase !== '2.117.0') process.exit(1)\""
+    ],
+    "checkpoint": "step-06-integration-state-transitions",
+    "files": ["package.json", "package-lock.json", "scripts/write-supabase-test-env.mjs", "tests/integration/state-transitions.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T2",
+    "title": "Unit tests for Google Calendar upsert-without-duplicate logic",
+    "epic": "02-integration-ci-deploy",
+    "dependencies": ["E1-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `syncPieceToGoogleCalendar` is called for a piece whose client has no mocked row in `client_calendar_mappings` THE SYSTEM SHALL return `{ skipped: 'sin_calendario_configurado' }` and SHALL NOT call `fetch`.",
+      "WHEN a mocked mapping and a valid non-expired `access_token` exist and NO mocked row exists yet in `calendar_event_links` for that piece THE SYSTEM SHALL call `fetch` with method `POST` against the events-insert URL, then insert a new mocked `calendar_event_links` row with the returned `google_event_id`.",
+      "WHEN a mocked mapping exists AND a `calendar_event_links` row already exists for that piece (the reschedule case) THE SYSTEM SHALL call `fetch` with method `PATCH` against that existing `google_event_id`'s URL, and SHALL NOT insert a second `calendar_event_links` row.",
+      "WHEN the stored `access_token` is expired and a `refresh_token` exists THE SYSTEM SHALL first `POST` to the Google OAuth token endpoint to refresh it before calling the Calendar API.",
+      "WHEN the mocked Calendar API responds non-OK THE SYSTEM SHALL return `{ error: <response body text> }` and SHALL NOT write to `calendar_event_links`."
+    ],
+    "verify": [
+      "npx vitest run tests/unit/lib/google-calendar-sync.test.ts"
+    ],
+    "checkpoint": "step-07-google-calendar-sync-tests",
+    "files": ["tests/unit/lib/google-calendar-sync.test.ts"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T3",
+    "title": "Verify the CI pipeline (.github/workflows/ci.yml) locally before the first push",
+    "epic": "02-integration-ci-deploy",
+    "dependencies": ["E1-T2", "E1-T4", "E1-T5", "E2-T1", "E2-T2"],
+    "priority": "p1",
+    "acceptance": [
+      "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL declare triggers for both `push` and `pull_request`.",
+      "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL pin `actions/checkout@v7` and `actions/setup-node@v7` with `node-version: '22'`.",
+      "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL run, in order, `npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run test:integration`, and `npm run build`.",
+      "WHEN every command from the previous criterion is run locally, in that order, on this machine THE SYSTEM SHALL exit 0 on each."
+    ],
+    "verify": [
+      "grep -q \"pull_request\" .github/workflows/ci.yml",
+      "grep -q \"^  push:\" .github/workflows/ci.yml",
+      "grep -q \"actions/checkout@v7\" .github/workflows/ci.yml",
+      "grep -q \"actions/setup-node@v7\" .github/workflows/ci.yml",
+      "grep -q \"node-version: '22'\" .github/workflows/ci.yml",
+      "grep -q \"npm run lint\" .github/workflows/ci.yml",
+      "grep -q \"tsc --noEmit\" .github/workflows/ci.yml",
+      "grep -q \"npm run test\" .github/workflows/ci.yml",
+      "grep -q \"npm run test:integration\" .github/workflows/ci.yml",
+      "grep -q \"npm run build\" .github/workflows/ci.yml",
+      "npm run lint",
+      "npx tsc --noEmit",
+      "npm run test",
+      "npm run test:integration",
+      "npm run build"
+    ],
+    "checkpoint": "step-08-ci-pipeline",
+    "files": ["README.md"],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T4",
+    "title": "Verify the agent workspace (CLAUDE.md, AGENTS.md, .claude/) landed correctly",
+    "epic": "02-integration-ci-deploy",
+    "dependencies": [],
+    "priority": "p2",
+    "acceptance": [
+      "WHEN `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json`, `.claude/skills/approval-flow-webhooks/SKILL.md`, and `.claude/rules/tests.md` are checked THE SYSTEM SHALL find all five present at the project root.",
+      "WHEN `.claude/settings.json` is parsed THE SYSTEM SHALL parse as valid JSON.",
+      "WHEN `.claude/skills/approval-flow-webhooks/SKILL.md` is inspected THE SYSTEM SHALL mention all 7 `content_status` values (`borrador`, `pendiente_revision`, `cambios_solicitados`, `aprobado`, `programado`, `publicado`, `cancelado`) and all 7 `webhook_event_type` values (`pieza_creada_revision`, `pieza_aprobada`, `cambios_solicitados`, `comentario_agregado`, `fecha_cambiada`, `pieza_programada`, `pieza_publicada`)."
+    ],
+    "verify": [
+      "test -f CLAUDE.md",
+      "test -f AGENTS.md",
+      "test -f .claude/settings.json",
+      "test -f .claude/skills/approval-flow-webhooks/SKILL.md",
+      "test -f .claude/rules/tests.md",
+      "node -e \"JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))\"",
+      "for v in borrador pendiente_revision cambios_solicitados aprobado programado publicado cancelado pieza_creada_revision pieza_aprobada comentario_agregado fecha_cambiada pieza_programada pieza_publicada; do grep -q \"$v\" .claude/skills/approval-flow-webhooks/SKILL.md || exit 1; done"
+    ],
+    "checkpoint": "step-09-agent-workspace",
+    "files": [],
+    "status": "pending"
+  },
+  {
+    "id": "E2-T5",
+    "title": "Production build verification + Vercel deploy readiness (Node 22.x)",
+    "epic": "02-integration-ci-deploy",
+    "dependencies": ["E2-T3"],
+    "priority": "p0",
+    "acceptance": [
+      "WHEN `npm run build` runs THE SYSTEM SHALL exit 0 and produce `.next/BUILD_ID`.",
+      "WHEN the built server is started with `npm start`, with `.env.local` populated from a running local Supabase instance via `scripts/write-supabase-test-env.mjs .env.local`, and queried at `/login` THE SYSTEM SHALL respond with HTTP 200.",
+      "WHEN README.md's \"Despliegue en Vercel\" section is inspected THE SYSTEM SHALL list all 7 variable names from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`).",
+      "WHEN README.md's \"Despliegue en Vercel\" section is inspected THE SYSTEM SHALL state that the Vercel project's Node.js Version setting must be `22.x`.",
+      "WHEN `package.json`'s `engines.node` is inspected THE SYSTEM SHALL still read `22.x`, unchanged since step 1."
+    ],
+    "verify": [
+      "npx supabase start",
+      "node scripts/write-supabase-test-env.mjs .env.local",
+      "npm run build",
+      "test -f .next/BUILD_ID",
+      "npm start & SERVER_PID=$!; sleep 3; CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login); kill $SERVER_PID; test \"$CODE\" = 200",
+      "npx supabase stop",
+      "for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY NEXT_PUBLIC_APP_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REDIRECT_URI; do grep -q \"$v\" README.md || exit 1; done",
+      "grep -q \"22.x\" README.md",
+      "node -e \"const p=require('./package.json'); if(p.engines.node !== '22.x') process.exit(1)\""
+    ],
+    "checkpoint": "step-10-production-build-vercel-readiness",
+    "files": ["README.md"],
+    "status": "pending"
+  }
+]
