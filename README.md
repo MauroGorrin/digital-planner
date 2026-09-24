@@ -102,6 +102,32 @@ El payload incluye: id de la pieza, cliente, título, estado, fecha/hora, plataf
 7. Como agencia, arrastra la pieza a otra fecha en el calendario mensual → confirma que la hora se mantiene en la zona horaria del cliente y que el evento de Google Calendar se actualiza sin duplicarse (`fecha_cambiada`).
 8. Marca la pieza como **Programado** y luego **Publicado**, revisando en cada paso el historial de la ficha y, si hay un webhook de prueba (p. ej. https://webhook.site), que cada evento llegó firmado.
 
+## Arranque rápido en local (con datos de demostración)
+
+Si solo quieres ver la aplicación funcionando, no hace falta crear un proyecto en Supabase ni un
+usuario a mano. Con Docker corriendo:
+
+```bash
+npm install
+npx supabase start                                   # Postgres + Auth local, aplica las migraciones
+node scripts/write-supabase-test-env.mjs .env.local  # escribe las credenciales locales
+node scripts/seed-demo.mjs                           # marca de ejemplo con 4 piezas
+npm run dev
+```
+
+Entra en http://localhost:3000/login con cualquiera de los dos usuarios que crea el seed:
+
+| Usuario | Rol | Qué puede hacer |
+|---|---|---|
+| `agencia@demo.local` / `demo1234` | Administrador de agencia | Crear y editar piezas, ver todas las marcas |
+| `cliente@demo.local` / `demo1234` | Contacto de cliente | Ver solo su marca, aprobar o solicitar cambios |
+
+`scripts/seed-demo.mjs` es idempotente y **se niega a correr contra una URL que no sea local**, para
+que una contraseña de demostración no llegue nunca a una base real. Para producción, el primer
+administrador se crea desde el panel de Supabase (sección 1 más arriba).
+
+Para apagar todo: `npm run db:test:stop`.
+
 ## Pruebas
 
 | Comando | Qué corre |
