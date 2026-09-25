@@ -54,6 +54,13 @@ derivado en cada lectura, no una columna guardada, para no tener un segundo esta
 desincronice. "Subir nueva versión" en un adjunto fija su `replaces_id` y pliega la versión
 anterior bajo la nueva.
 
+Como las filas del historial también se pueden borrar, borrar un eslabón **intermedio** de una
+cadena de versiones (con A ← B ← C, borrar B) hace que `C.replaces_id` quede en `null`
+(`on delete set null`) y A se quede sin nada que la referencie: A reaparece en la lista como
+adjunto vigente independiente, es decir, una versión vieja vuelve a mostrarse como actual. No hay
+pérdida de datos ni error — es un efecto inherente a poder borrar el historial, y queda anotado acá
+para que no sorprenda.
+
 **La salvedad del `.mov`.** `video/quicktime` está entre los tipos permitidos a propósito: es lo
 que exporta un iPhone y el equipo lo va a subir seguido. Pero su reproducción inline no está
 garantizada fuera de Safari — en Chrome, por ejemplo, un `.mov` con códec HEVC puede no

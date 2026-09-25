@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { deleteAttachment } from '@/app/actions';
@@ -29,6 +29,15 @@ function FilaAdjunto({
 }) {
   const inputVersionRef = useRef<HTMLInputElement>(null);
   const [videoFallo, setVideoFallo] = useState(false);
+
+  // La fila conserva identidad por su `key` entre renders (p. ej. tras un router.refresh() que
+  // trae una URL firmada nueva), así que este estado sobreviviría a un error transitorio (URL
+  // vencida, un 5xx momentáneo) y dejaría el aviso de "no reproducible" pegado para siempre.
+  // Resetear cuando cambia la URL le da a un error pasajero la misma oportunidad de recuperarse
+  // que tenía antes de que este estado existiera.
+  useEffect(() => {
+    setVideoFallo(false);
+  }, [url]);
 
   return (
     <div className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">

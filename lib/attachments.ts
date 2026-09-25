@@ -169,6 +169,17 @@ export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void
 const UMBRAL_ESTANCAMIENTO_MS = 60_000;
 
 /**
+ * Tope de espera de la RESPUESTA del servidor una vez que el cuerpo ya se envió completo
+ * (`xhr.upload`'s `load`). Es otra magnitud que UMBRAL_ESTANCAMIENTO_MS: ese mide inactividad
+ * DURANTE la transferencia y se reinicia con cada byte que llega; este mide cuánto se espera la
+ * confirmación con el cuerpo ya entregado, un tramo donde no va a haber más eventos de progreso
+ * que reinicien nada. Sin este tope, un servidor que acepte el cuerpo y después no responda ni
+ * cierre el socket deja la promesa colgada para siempre — el mismo cuelgue que el vigilante de
+ * estancamiento existe para evitar, solo que en la otra punta de la subida.
+ */
+const UMBRAL_ESPERA_RESPUESTA_MS = 300_000;
+
+/**
  * Sube un archivo a una URL firmada con XMLHttpRequest, que es la única forma de obtener
  * progreso real: el upload() del SDK usa fetch, que no emite eventos de progreso.
  */
@@ -185,10 +196,18 @@ export function subirConProgreso(opciones: {
     // Vigilante de estancamiento: si pasa UMBRAL_ESTANCAMIENTO_MS sin un solo evento de
     // progreso, abortamos nosotros mismos en vez de dejar la promesa colgada para siempre.
     let estancada = false;
+    // Espera de respuesta: si pasa UMBRAL_ESPERA_RESPUESTA_MS después de que el cuerpo ya se
+    // envió por completo sin que llegue la respuesta del servidor, abortamos también acá.
+    let sinRespuesta = false;
     let temporizadorDeEstancamiento: ReturnType<typeof setTimeout>;
+    let temporizadorDeEsperaDeRespuesta: ReturnType<typeof setTimeout>;
 
     function limpiarVigilante() {
       clearTimeout(temporizadorDeEstancamiento);
+    }
+
+    function limpiarEsperaDeRespuesta() {
+      clearTimeout(temporizadorDeEsperaDeRespuesta);
     }
 
     function reiniciarVigilante() {
@@ -197,6 +216,13 @@ export function subirConProgreso(opciones: {
         estancada = true;
         xhr.abort();
       }, UMBRAL_ESTANCAMIENTO_MS);
+    }
+
+    function armarEsperaDeRespuesta() {
+      temporizadorDeEsperaDeRespuesta = setTimeout(() => {
+        sinRespuesta = true;
+        xhr.abort();
+      }, UMBRAL_ESPERA_RESPUESTA_MS);
     }
 
     reiniciarVigilante();
@@ -210,29 +236,40 @@ export function subirConProgreso(opciones: {
 
     // xhr.upload 'load' se dispara cuando el cuerpo terminó de enviarse, antes de la respuesta
     // del servidor. A partir de ahí no va a haber más eventos de progreso mientras el servidor
-    // finaliza el objeto (puede tardar, con 200 MB), y el vigilante —que solo se reinicia con
-    // progreso— daría un falso positivo justo cuando la subida en realidad ya terminó bien.
-    // Lo desarmamos del todo acá: xhr.addEventListener('load'/'error') más abajo son quienes
-    // resuelven la promesa a partir de este punto, y ya no dependen de ningún plazo nuestro.
+    // finaliza el objeto (puede tardar, con 200 MB), y el vigilante de estancamiento —que solo
+    // se reinicia con progreso— daría un falso positivo justo cuando la subida en realidad ya
+    // terminó bien. Lo desarmamos acá, pero no dejamos la espera de la respuesta sin ningún
+    // tope: armamos el temporizador de espera de respuesta, que sí puede abortar si el servidor
+    // nunca contesta ni cierra el socket.
     xhr.upload.addEventListener('load', () => {
       limpiarVigilante();
+      armarEsperaDeRespuesta();
     });
 
     xhr.addEventListener('load', () => {
       limpiarVigilante();
+      limpiarEsperaDeRespuesta();
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`La subida falló (HTTP ${xhr.status}). Vuelve a intentarlo.`));
     });
     xhr.addEventListener('error', () => {
       limpiarVigilante();
+      limpiarEsperaDeRespuesta();
       reject(new Error('Se cortó la conexión durante la subida. Vuelve a intentarlo.'));
     });
     xhr.addEventListener('abort', () => {
       limpiarVigilante();
+      limpiarEsperaDeRespuesta();
       if (estancada) {
         reject(
           new Error(
             'La subida se estancó: no hubo avance durante más de un minuto. Revisa tu conexión y vuelve a intentarlo.'
+          )
+        );
+      } else if (sinRespuesta) {
+        reject(
+          new Error(
+            'El archivo se envió por completo, pero el servidor no confirmó la subida a tiempo. Puede que haya quedado registrado: revisa antes de volver a intentarlo.'
           )
         );
       } else {

@@ -517,5 +517,28 @@ describe('subirConProgreso', () => {
       xhr.disparaCarga(200);
       await expect(promesa).resolves.toBeUndefined();
     });
+
+    it('rechaza con un mensaje propio si el servidor nunca responde tras recibir el cuerpo completo', async () => {
+      vi.useFakeTimers();
+      const obtenerXhr = instalarFalsoXHR();
+
+      const promesa = subirConProgreso({
+        signedUrl: 'https://ejemplo.local/subir?token=abc',
+        file: archivo,
+        onProgress: () => {},
+      });
+      const promesaRechazada = expect(promesa).rejects.toThrow(/no confirmó/i);
+      const xhr = obtenerXhr();
+
+      xhr.disparaProgreso(200, 200);
+      xhr.disparaCargaDeSubida(); // el cuerpo terminó de enviarse...
+
+      // ...y el servidor jamás responde ni cierra el socket. Sin un tope propio para esta
+      // espera, nada vuelve a dispararse acá y la promesa quedaría colgada para siempre.
+      await vi.advanceTimersByTimeAsync(300_001);
+
+      await promesaRechazada;
+      expect(xhr.abortLlamado).toBe(true);
+    });
   });
 });
