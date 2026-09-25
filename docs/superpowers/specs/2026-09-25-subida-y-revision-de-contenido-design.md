@@ -23,7 +23,7 @@ Verificado leyendo `components/AttachmentUploader.tsx` y `supabase/migrations/00
 ## Alcance
 
 **Dentro:** límites y validación de archivos, barra de progreso real, reproducción inline de video,
-versionado de adjuntos por rondas más reemplazo explícito, y la corrección de la política de
+versionado de adjuntos por rondas más reemplazo explícito, y la paridad de lectura de la política de
 borrado.
 
 **Fuera, deliberadamente:**

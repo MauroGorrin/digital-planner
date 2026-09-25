@@ -38,7 +38,7 @@ set file_size_limit = 209715200,
     ]
 where id = 'attachments';
 
--- Hoy este "and has_client_access(...)" no cambia el comportamiento: esa funcion devuelve
+-- Hoy este "and has_client_access(...)" no cambia la decisión de autorización para rutas bien formadas: esa funcion devuelve
 -- verdadero para cualquier usuario de agencia sin mirar la marca (0001_init.sql), y el modelo de
 -- permisos del producto es justamente ese (cualquier agencia opera sobre cualquier cliente). Se
 -- agrega para que las tres politicas del bucket se lean igual y para que un futuro acotamiento de
