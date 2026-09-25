@@ -122,6 +122,8 @@ export interface Attachment {
   file_type: string | null;
   file_size: number | null;
   uploaded_by: string | null;
+  replaces_id: string | null;
+  review_round: number;
   created_at: string;
 }
 

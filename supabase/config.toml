@@ -39,4 +39,4 @@ enable_confirmations = false
 
 [storage]
 enabled = true
-file_size_limit = "50MiB"
+file_size_limit = "200MiB"

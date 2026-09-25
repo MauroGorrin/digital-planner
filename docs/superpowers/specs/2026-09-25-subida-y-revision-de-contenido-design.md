@@ -18,7 +18,7 @@ Verificado leyendo `components/AttachmentUploader.tsx` y `supabase/migrations/00
 | El video no tiene previsualización | Solo `image/*` se muestra inline. Para aprobar un reel, el cliente tiene que descargarlo — rompe el circuito central del producto. |
 | Los adjuntos son una lista plana | Tras un "cambios solicitados", la versión vieja y la nueva conviven sin distinción. El cliente puede aprobar mirando el archivo equivocado. |
 | Si el insert en base falla tras subir al bucket | Queda un archivo huérfano que nadie ve ni limpia. |
-| `attachments_delete` solo exige `is_agency()` | Cualquier miembro de agencia puede borrar adjuntos de una marca que no tiene asignada. Las políticas de lectura y escritura sí verifican la marca. |
+| `attachments_delete` solo exige `is_agency()` | Se lee distinto de las políticas de lectura y escritura, que además invocan `has_client_access()`. La diferencia hoy es cosmética —esa función devuelve verdadero para cualquier usuario de agencia—, pero la asimetría invita a leer un control de marca donde no lo hay. |
 
 ## Alcance
 
@@ -168,8 +168,8 @@ solo si el cliente le da play.
 1. El trigger asigna `review_round = 1` antes de cualquier `cambios_solicitados`, y `2` a un archivo
    subido después de esa transición.
 2. El `unique (replaces_id)` impide que dos adjuntos reemplacen al mismo padre.
-3. La política de borrado corregida rechaza a un miembro de agencia sin acceso a esa marca, y
-   permite al que sí lo tiene.
+3. La política de borrado rechaza a un contacto de cliente y permite a un usuario de agencia,
+   sobre un objeto que existe de verdad en el bucket.
 
 **Unitarias** (`tests/unit/`):
 
@@ -194,8 +194,8 @@ Sin pruebas E2E de navegador: sigue siendo no-objetivo del proyecto.
 5. CUANDO se sube una nueva versión de un adjunto concreto, EL SISTEMA muestra la nueva como vigente
    y pliega la anterior bajo ella.
 6. CUANDO el insert en base falla después de subir al bucket, EL SISTEMA borra el objeto subido.
-7. CUANDO un miembro de agencia sin acceso a una marca intenta borrar un adjunto de esa marca,
-   EL SISTEMA lo rechaza.
+7. CUANDO un contacto de cliente intenta borrar un adjunto, EL SISTEMA lo rechaza, y CUANDO lo
+   intenta un usuario de agencia, lo permite.
 
 ### Cómo se verifica cada criterio
 
@@ -210,7 +210,7 @@ los siete criterios se comprueban a mano. Se dice acá en vez de dejarlo implíc
 | 4 — asignación de ronda | Integración 1 |
 | 5 — reemplazo explícito visible | **Manual**: subir una nueva versión y confirmar que la anterior queda plegada |
 | 6 — sin huérfanos | Unitaria sobre la ruta de compensación, con el insert forzado a fallar |
-| 7 — borrado entre marcas | Integración 3 |
+| 7 — quién puede borrar | Integración 3 |
 
 ## Orden de entrega sugerido
 
