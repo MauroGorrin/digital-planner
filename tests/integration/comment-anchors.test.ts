@@ -124,6 +124,7 @@ describe('anclas de comentarios', () => {
     });
 
     expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/no pertenece a la pieza/);
   });
 
   it('conserva el comentario cuando se borra el adjunto al que apuntaba', async () => {
