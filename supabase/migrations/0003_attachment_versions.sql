@@ -34,13 +34,15 @@ create trigger attachments_set_round
 --
 -- ADVERTENCIA PARA QUIEN APLIQUE ESTO EN OTRO ENTORNO: Supabase aplica
 -- min(limite global del proyecto, limite del bucket). Este update solo fija el limite del
--- bucket; no valida ni sube el limite global del proyecto. Si el proyecto sigue en su default
--- (50 MB), la fila de storage.buckets dira 200 MB pero un archivo de 150 MB seguira fallando
--- igual. Antes de aplicar esta migracion en un proyecto nuevo, sube el limite global desde el
--- panel de Supabase: Settings -> Storage -> "Upload file size limit" (>= 200 MB). Ese paso es
--- manual y no lo hace esta migracion.
+-- bucket; no valida ni sube el limite global del proyecto. Este proyecto esta en el plan
+-- gratuito de Supabase, donde el *Global file size limit* es 50 MB por defecto y NO se puede
+-- subir sin cambiar de plan -- por eso el valor de abajo esta alineado con ese tope y no es una
+-- cifra arbitraria. Si en el futuro se mejora el plan y se sube el limite global desde el panel
+-- (Settings -> Storage -> "Upload file size limit"), hay que subir tambien este valor -- y el de
+-- TAMANO_MAXIMO_BYTES en lib/attachments.ts y el de supabase/config.toml -- para que los tres
+-- sigan de acuerdo.
 update storage.buckets
-set file_size_limit = 209715200,
+set file_size_limit = 52428800,
     allowed_mime_types = array[
       'image/jpeg', 'image/png', 'image/webp', 'image/gif',
       'video/mp4', 'video/quicktime', 'video/webm', 'application/pdf'

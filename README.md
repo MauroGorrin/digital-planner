@@ -16,13 +16,16 @@ Aplicación web responsive para que una agencia de marketing y sus clientes plan
    - `supabase/migrations/0001_init.sql` (esquema, roles, RLS, funciones de transición de estado)
    - `supabase/migrations/0002_storage.sql` (bucket privado `attachments` y políticas)
    - `supabase/migrations/0003_attachment_versions.sql` (versionado de adjuntos y límites del
-     bucket) — **paso manual obligatorio antes de aplicarla:** sube el límite global de storage
-     del proyecto en el panel de Supabase, **Settings → Storage → "Upload file size limit"**, a
-     200 MB o más. Supabase aplica `min(límite global del proyecto, límite del bucket)`, y esta
-     migración solo toca el límite del bucket con un `update` directo a `storage.buckets` — eso
-     no valida ni sube el límite global. Si te saltas este paso del panel, `storage.buckets`
-     dirá 200 MB pero un reel de 150 MB seguirá fallando con el mismo error incomprensible que
-     esta migración existe para eliminar.
+     bucket) — **paso manual antes de aplicarla:** verifica que el límite global de storage del
+     proyecto, en el panel de Supabase, **Settings → Storage → "Upload file size limit"**, esté
+     en 50 MB. En el plan gratuito de Supabase ese límite global es 50 MB por defecto y **no se
+     puede subir sin mejorar de plan**, así que normalmente no hay nada que cambiar acá — solo
+     confirmarlo. Supabase aplica `min(límite global del proyecto, límite del bucket)`, y esta
+     migración solo toca el límite del bucket con un `update` directo a `storage.buckets`; el
+     valor que fija (50 MB) ya está alineado con el tope del plan gratuito, así que no hay
+     discrepancia entre ambos. Si en el futuro se mejora el plan de Supabase y se sube el límite
+     global desde el panel, hay que subir también el número en los tres lugares donde vive (ver
+     abajo).
 3. En **Authentication > Providers**, deja activado el login por correo/contraseña. Para que las invitaciones envíen correo, configura un proveedor SMTP en **Authentication > Email Templates / SMTP Settings** (si no configuras SMTP, el usuario se crea igualmente pero deberás compartirle el enlace de invitación o restablecer su contraseña manualmente desde el panel de Supabase).
 4. Crea al primer administrador manualmente: en **Authentication > Users**, crea un usuario con su correo, y en la tabla `profiles` (se crea automáticamente) actualiza su `role` a `agency_admin`:
    ```sql
@@ -31,11 +34,20 @@ Aplicación web responsive para que una agencia de marketing y sus clientes plan
 
 ### Adjuntos: límites, flujo de subida y versionado
 
-**Límites — el contrato del producto.** 200 MB por archivo. Tipos permitidos: `image/jpeg`,
+**Límites — el contrato del producto.** 50 MB por archivo. Tipos permitidos: `image/jpeg`,
 `image/png`, `image/webp`, `image/gif`, `video/mp4`, `video/quicktime` (`.mov`), `video/webm`,
-`application/pdf`. Hoy estos valores viven en tres lugares del código —
-`lib/attachments.ts`, `supabase/migrations/0003_attachment_versions.sql` y
-`supabase/config.toml` — y hay que mantenerlos sincronizados a mano si cambian.
+`application/pdf`.
+
+El tope de 50 MB no es una decisión de producto: el proyecto de Supabase está en el **plan
+gratuito**, cuyo *Global file size limit* es 50 MB y no admite más sin mejorar de plan. Ese límite
+global manda sobre el límite del bucket (Supabase aplica el mínimo de los dos), así que aunque el
+bucket dijera un número mayor, el servidor seguiría cortando en 50 MB. Para subir el tope hay que:
+1. mejorar el plan de Supabase y subir el límite global desde el panel (**Settings → Storage →
+   "Upload file size limit"**), y
+2. después subir el mismo número en los tres lugares donde vive en el código —
+   `lib/attachments.ts` (`TAMANO_MAXIMO_BYTES`), `supabase/migrations/0003_attachment_versions.sql`
+   (`file_size_limit` del `update storage.buckets`) y `supabase/config.toml`
+   (`[storage] file_size_limit`) — que hay que mantener sincronizados a mano.
 
 **Por qué la subida es navegador → XHR → base, y no una Server Action.** El flujo real es:
 `createSignedUploadUrl()` (URL firmada de un solo uso) → `PUT` a esa URL con `XMLHttpRequest` →

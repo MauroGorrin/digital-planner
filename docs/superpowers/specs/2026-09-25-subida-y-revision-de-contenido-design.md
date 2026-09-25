@@ -83,9 +83,12 @@ directo del navegador al bucket. Sin esto, una "barra de progreso" sería una an
 
 ### Tipos y límites
 
-Bucket: **200 MB** por archivo (headroom sobre los ~150 MB reales) y tipos permitidos
-`image/jpeg`, `image/png`, `image/webp`, `image/gif`, `video/mp4`, `video/quicktime`, `video/webm`,
-`application/pdf`.
+Bucket: **50 MB** por archivo y tipos permitidos `image/jpeg`, `image/png`, `image/webp`,
+`image/gif`, `video/mp4`, `video/quicktime`, `video/webm`, `application/pdf`.
+
+El tope de 50 MB lo fija el plan gratuito de Supabase (su *Global file size limit* por defecto,
+que no se puede subir sin cambiar de plan y que manda sobre el límite del bucket) — no es una
+decisión de producto. Si en el futuro se mejora el plan, este número puede subir.
 
 `video/quicktime` entra a propósito: es lo que exporta un iPhone y el equipo subirá `.mov`
 habitualmente. **Salvedad:** un `.mov` se almacena bien, pero su reproducción inline no está
@@ -105,7 +108,7 @@ banda, y en el bucket como autoridad final, que no depende de que el cliente coo
    sin problema, y la restricción solo impide que dos archivos declaren el mismo padre. No hay que
    "corregirla" con un índice parcial.
 2. Función `set_attachment_round()` y trigger `before insert` sobre `attachments`.
-3. Para el bucket `attachments`: `file_size_limit = 209715200` (200 MB) y `allowed_mime_types =
+3. Para el bucket `attachments`: `file_size_limit = 52428800` (50 MB) y `allowed_mime_types =
    array['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/quicktime',
    'video/webm','application/pdf']`.
 4. Reemplazo de la política `attachments_delete` para que exija también
@@ -184,7 +187,7 @@ Sin pruebas E2E de navegador: sigue siendo no-objetivo del proyecto.
 
 ## Criterios de aceptación
 
-1. CUANDO se sube un archivo de más de 200 MB, EL SISTEMA lo rechaza en el navegador indicando el
+1. CUANDO se sube un archivo de más de 50 MB, EL SISTEMA lo rechaza en el navegador indicando el
    peso real y el máximo, sin iniciar la transferencia.
 2. CUANDO se sube un video permitido, EL SISTEMA muestra progreso real basado en bytes transferidos.
 3. CUANDO el cliente abre una pieza con un video vigente, EL SISTEMA lo reproduce inline sin

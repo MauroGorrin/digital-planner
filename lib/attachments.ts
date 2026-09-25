@@ -1,7 +1,16 @@
 import type { Attachment } from '@/types/database';
 
-/** Igual al file_size_limit del bucket en 0003_attachment_versions.sql. */
-export const TAMANO_MAXIMO_BYTES = 209_715_200;
+/**
+ * Igual al file_size_limit del bucket en 0003_attachment_versions.sql.
+ *
+ * 52428800 bytes = 50 MiB = 50 MB (convención de Supabase), no una cifra elegida por el
+ * producto: es el tope del *Global file size limit* del plan gratuito de Supabase, que no se
+ * puede subir desde el panel sin cambiar de plan, y que manda sobre el file_size_limit del
+ * bucket (Supabase aplica el mínimo de los dos). Si algún día se mejora el plan y se sube el
+ * límite global, este valor también debe subir — junto con el de la migración y el de
+ * supabase/config.toml — para que los tres sigan de acuerdo.
+ */
+export const TAMANO_MAXIMO_BYTES = 52_428_800;
 
 /** Igual al allowed_mime_types del bucket en 0003_attachment_versions.sql. */
 export const TIPOS_PERMITIDOS = [

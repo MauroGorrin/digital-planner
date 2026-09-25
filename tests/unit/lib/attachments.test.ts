@@ -48,14 +48,14 @@ describe('validarArchivo', () => {
       size: TAMANO_MAXIMO_BYTES + 1,
     });
     expect(mensaje).toContain('enorme.mp4');
-    expect(mensaje).toContain('200');
+    expect(mensaje).toContain('50');
   });
 });
 
 describe('formatearBytes', () => {
   it('usa la unidad legible mas cercana', () => {
     expect(formatearBytes(1024)).toBe('1.0 KB');
-    expect(formatearBytes(209_715_200)).toBe('200.0 MB');
+    expect(formatearBytes(52_428_800)).toBe('50.0 MB');
   });
 });
 
