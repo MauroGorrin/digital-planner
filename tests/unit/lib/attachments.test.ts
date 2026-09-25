@@ -7,6 +7,7 @@ import {
   registrarAdjunto,
   validarArchivo,
 } from '@/lib/attachments';
+import type { ClienteAdjuntos } from '@/lib/attachments';
 import type { Attachment } from '@/types/database';
 
 function adjunto(parcial: Partial<Attachment> & { id: string }): Attachment {
@@ -163,5 +164,43 @@ describe('registrarAdjunto', () => {
       /violacion de RLS/
     );
     expect(remove).toHaveBeenCalledWith(['cliente-1/pieza-1/reel.mp4']);
+  });
+
+  function clienteConLimpieza(
+    errorDeInsert: { message: string },
+    remove: (rutas: string[]) => PromiseLike<{ error: { message: string } | null }>
+  ): ClienteAdjuntos {
+    return {
+      from: () => ({ insert: vi.fn().mockResolvedValue({ error: errorDeInsert }) }),
+      storage: { from: () => ({ remove }) },
+    };
+  }
+
+  it('si la limpieza tambien falla, el mensaje nombra ambos motivos y la ruta', async () => {
+    const remove = vi
+      .fn<(rutas: string[]) => Promise<{ error: { message: string } | null }>>()
+      .mockResolvedValue({ error: { message: 'sin permiso para borrar' } });
+    const cliente = clienteConLimpieza({ message: 'violacion de RLS' }, remove);
+
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /violacion de RLS/
+    );
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /sin permiso para borrar/
+    );
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /cliente-1\/pieza-1\/reel\.mp4/
+    );
+  });
+
+  it('si la limpieza rechaza en vez de resolver, no se pierde el error original del insert', async () => {
+    const remove = vi
+      .fn<(rutas: string[]) => Promise<{ error: { message: string } | null }>>()
+      .mockRejectedValue(new Error('fetch failed'));
+    const cliente = clienteConLimpieza({ message: 'violacion de RLS' }, remove);
+
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /violacion de RLS/
+    );
   });
 });

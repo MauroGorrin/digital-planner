@@ -132,7 +132,19 @@ export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void
   });
 
   if (error) {
-    await supabase.storage.from('attachments').remove([filePath]);
+    let motivoDeLimpieza: string | null = null;
+    try {
+      const { error: errorDeLimpieza } = await supabase.storage.from('attachments').remove([filePath]);
+      if (errorDeLimpieza) motivoDeLimpieza = errorDeLimpieza.message;
+    } catch (excepcion) {
+      motivoDeLimpieza = excepcion instanceof Error ? excepcion.message : String(excepcion);
+    }
+
+    if (motivoDeLimpieza) {
+      throw new Error(
+        `No se pudo registrar el archivo (${error.message}) y tampoco se pudo limpiar el archivo ya subido (${motivoDeLimpieza}). Quedó en el almacenamiento como ${filePath}.`
+      );
+    }
     throw new Error(`No se pudo registrar el archivo: ${error.message}`);
   }
 }
