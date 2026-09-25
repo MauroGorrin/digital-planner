@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Attachment } from '@/types/database';
-import { estaReemplazado, formatearSegundos } from '@/lib/comentarios';
+import { estaReemplazado, formatearSegundos, saltarAlSegundo } from '@/lib/comentarios';
 
 function adjunto(id: string, replacesId: string | null = null): Attachment {
   return {
@@ -33,6 +33,16 @@ describe('formatearSegundos', () => {
     expect(formatearSegundos(12.9)).toBe('0:12');
     expect(formatearSegundos(-5)).toBe('0:00');
   });
+
+  it('cae en los limites exactos de minuto y hora', () => {
+    expect(formatearSegundos(60)).toBe('1:00');
+    expect(formatearSegundos(3600)).toBe('1:00:00');
+    expect(formatearSegundos(3601)).toBe('1:00:01');
+  });
+
+  it('trata un valor no finito como cero', () => {
+    expect(formatearSegundos(NaN)).toBe('0:00');
+  });
 });
 
 describe('estaReemplazado', () => {
@@ -48,5 +58,69 @@ describe('estaReemplazado', () => {
 
   it('es falso cuando no hay reemplazos', () => {
     expect(estaReemplazado('suelto', [adjunto('suelto')])).toBe(false);
+  });
+
+  it('es falso cuando el attachmentId no esta en el arreglo', () => {
+    expect(estaReemplazado('inexistente', [adjunto('v1'), adjunto('v2', 'v1')])).toBe(false);
+  });
+});
+
+type VideoDoble = {
+  readyState: number;
+  currentTime: number;
+  closest: ReturnType<typeof vi.fn>;
+  scrollIntoView: ReturnType<typeof vi.fn>;
+  addEventListener: ReturnType<typeof vi.fn>;
+};
+
+function videoDoble(readyState = 1, padre: { open: boolean } | null = null): VideoDoble {
+  return {
+    readyState,
+    currentTime: 0,
+    closest: vi.fn(() => padre),
+    scrollIntoView: vi.fn(),
+    addEventListener: vi.fn(),
+  };
+}
+
+describe('saltarAlSegundo', () => {
+  it('mueve el reproductor cuando los metadatos ya estan cargados', () => {
+    const video = videoDoble(1);
+    saltarAlSegundo(video as unknown as HTMLVideoElement, 42);
+
+    expect(video.currentTime).toBe(42);
+    expect(video.scrollIntoView).toHaveBeenCalled();
+    expect(video.addEventListener).not.toHaveBeenCalled();
+  });
+
+  it('espera a loadedmetadata cuando todavia no estan cargados', () => {
+    const video = videoDoble(0);
+    saltarAlSegundo(video as unknown as HTMLVideoElement, 42);
+
+    // Sin metadatos, asignar currentTime no tiene efecto: hay que esperar.
+    expect(video.currentTime).toBe(0);
+    expect(video.addEventListener).toHaveBeenCalledWith(
+      'loadedmetadata',
+      expect.any(Function),
+      { once: true }
+    );
+
+    // Al dispararse el evento, ahora si salta.
+    const escucha = video.addEventListener.mock.calls[0][1] as () => void;
+    escucha();
+    expect(video.currentTime).toBe(42);
+  });
+
+  it('despliega el details que contenga al reproductor', () => {
+    const padre = { open: false };
+    const video = videoDoble(1, padre);
+    saltarAlSegundo(video as unknown as HTMLVideoElement, 10);
+
+    expect(video.closest).toHaveBeenCalledWith('details');
+    expect(padre.open).toBe(true);
+  });
+
+  it('no lanza cuando el reproductor no existe', () => {
+    expect(() => saltarAlSegundo(null, 10)).not.toThrow();
   });
 });
