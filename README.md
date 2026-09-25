@@ -15,11 +15,55 @@ Aplicación web responsive para que una agencia de marketing y sus clientes plan
 2. En **SQL Editor**, ejecuta en orden:
    - `supabase/migrations/0001_init.sql` (esquema, roles, RLS, funciones de transición de estado)
    - `supabase/migrations/0002_storage.sql` (bucket privado `attachments` y políticas)
+   - `supabase/migrations/0003_attachment_versions.sql` (versionado de adjuntos y límites del
+     bucket) — **paso manual obligatorio antes de aplicarla:** sube el límite global de storage
+     del proyecto en el panel de Supabase, **Settings → Storage → "Upload file size limit"**, a
+     200 MB o más. Supabase aplica `min(límite global del proyecto, límite del bucket)`, y esta
+     migración solo toca el límite del bucket con un `update` directo a `storage.buckets` — eso
+     no valida ni sube el límite global. Si te saltas este paso del panel, `storage.buckets`
+     dirá 200 MB pero un reel de 150 MB seguirá fallando con el mismo error incomprensible que
+     esta migración existe para eliminar.
 3. En **Authentication > Providers**, deja activado el login por correo/contraseña. Para que las invitaciones envíen correo, configura un proveedor SMTP en **Authentication > Email Templates / SMTP Settings** (si no configuras SMTP, el usuario se crea igualmente pero deberás compartirle el enlace de invitación o restablecer su contraseña manualmente desde el panel de Supabase).
 4. Crea al primer administrador manualmente: en **Authentication > Users**, crea un usuario con su correo, y en la tabla `profiles` (se crea automáticamente) actualiza su `role` a `agency_admin`:
    ```sql
    update profiles set role = 'agency_admin' where email = 'tu-correo@agencia.com';
    ```
+
+### Adjuntos: límites, flujo de subida y versionado
+
+**Límites — el contrato del producto.** 200 MB por archivo. Tipos permitidos: `image/jpeg`,
+`image/png`, `image/webp`, `image/gif`, `video/mp4`, `video/quicktime` (`.mov`), `video/webm`,
+`application/pdf`. Hoy estos valores viven en tres lugares del código —
+`lib/attachments.ts`, `supabase/migrations/0003_attachment_versions.sql` y
+`supabase/config.toml` — y hay que mantenerlos sincronizados a mano si cambian.
+
+**Por qué la subida es navegador → XHR → base, y no una Server Action.** El flujo real es:
+`createSignedUploadUrl()` (URL firmada de un solo uso) → `PUT` a esa URL con `XMLHttpRequest` →
+insert en `attachments`. Dos motivos lo obligan, y son la razón de que esto no se "simplifique":
+- Vercel corta el cuerpo de un request de función serverless cerca de 4,5 MB; un archivo de 150 MB
+  nunca llegaría si pasara por una Server Action o una ruta de API.
+- El `upload()` del SDK de Supabase Storage usa `fetch` internamente, que no emite eventos de
+  progreso — solo `XMLHttpRequest` los expone. Sin eso, la barra de progreso sería una animación
+  inventada, no progreso real basado en bytes transferidos.
+
+**Versionado por rondas.** La ronda de revisión (`review_round`) la asigna un trigger de Postgres
+(`set_attachment_round()`, en `0003_attachment_versions.sql`) y nunca el navegador: cuenta las
+transiciones a `cambios_solicitados` de la pieza y suma uno, sobrescribiendo lo que llegue del
+cliente. Un adjunto es "vigente" si ningún otro lo reemplaza (`replaces_id`) — es un estado
+derivado en cada lectura, no una columna guardada, para no tener un segundo estado que se
+desincronice. "Subir nueva versión" en un adjunto fija su `replaces_id` y pliega la versión
+anterior bajo la nueva.
+
+**La salvedad del `.mov`.** `video/quicktime` está entre los tipos permitidos a propósito: es lo
+que exporta un iPhone y el equipo lo va a subir seguido. Pero su reproducción inline no está
+garantizada fuera de Safari — en Chrome, por ejemplo, un `.mov` con códec HEVC puede no
+reproducirse. Cuando el navegador no puede reproducirlo, la ficha lo detecta y muestra un aviso con
+un enlace de descarga en vez de un reproductor roto (`components/AttachmentUploader.tsx`).
+
+**`supabase/config.toml`.** El `file_size_limit` bajo `[storage]` es el límite de la Supabase local
+(Docker) que usan `npm run test:integration` y el arranque rápido local. No se alimenta del límite
+del bucket en `0003_attachment_versions.sql` ni viceversa — hay que mantenerlos sincronizados a
+mano.
 
 ## 2. Variables de entorno
 

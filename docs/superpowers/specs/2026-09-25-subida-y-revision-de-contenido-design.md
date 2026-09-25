@@ -210,7 +210,18 @@ los siete criterios se comprueban a mano. Se dice acá en vez de dejarlo implíc
 | 4 — asignación de ronda | Integración 1 |
 | 5 — reemplazo explícito visible | **Manual**: subir una nueva versión y confirmar que la anterior queda plegada |
 | 6 — sin huérfanos | Unitaria sobre la ruta de compensación, con el insert forzado a fallar |
-| 7 — quién puede borrar | Integración 3 |
+| 7 — quién puede borrar | Integración 3 — cubre la **paridad de lectura** de la política `attachments_delete` frente a las de lectura/escritura del bucket (todas invocan `has_client_access(...)` por igual), no un cambio de comportamiento. El comportamiento del borrado es **indistinguible por diseño** del que había antes, mientras `has_client_access()` siga siendo `is_agency() or exists (...)` (`0001_init.sql`): esa función devuelve verdadero para cualquier usuario de agencia sin mirar la marca. No leas este criterio como evidencia de un control de marca que no existe — ver "Decisiones" más arriba. |
+
+**Nota — la misma asimetría existe en la tabla, deliberadamente sin tocar.** La política
+`attachments_agency_delete` sobre la tabla `attachments` (no sobre el bucket) sigue usando solo
+`is_agency()`, mientras que `attachments_select` y `attachments_agency_insert` invocan
+`has_client_access(...)` (`0001_init.sql`, ver grep de `attachments_agency_delete`). Es la misma
+asimetría cosmética que esta rama corrigió en las políticas de `storage.objects`. Se deja sin
+tocar acá a propósito: corregirla sería otra migración por una paridad de lectura que, igual que en
+el bucket, no cambia ningún comportamiento hoy (`has_client_access()` es `is_agency() or ...`). Es
+una decisión consciente de alcance, no un olvido — si `has_client_access()` alguna vez se acota más
+allá de "cualquier agencia, cualquier cliente", ambas asimetrías (tabla y bucket) hay que revisarlas
+juntas.
 
 ## Orden de entrega sugerido
 
