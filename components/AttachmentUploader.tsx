@@ -28,13 +28,16 @@ function FilaAdjunto({
   subiendoVersion?: boolean;
 }) {
   const inputVersionRef = useRef<HTMLInputElement>(null);
+  const [videoFallo, setVideoFallo] = useState(false);
 
   return (
     <div className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
       <div className="min-w-0 flex-1">
         <a href={url} target="_blank" rel="noreferrer">
           <p className="truncate text-sm font-medium text-brand-700">{adjunto.file_name}</p>
-          <p className="text-xs text-slate-400">{formatearBytes(adjunto.file_size ?? 0)}</p>
+          <p className="text-xs text-slate-400">
+            {adjunto.file_size ? formatearBytes(adjunto.file_size) : null}
+          </p>
 
           {adjunto.file_type?.startsWith('image/') && url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -43,15 +46,26 @@ function FilaAdjunto({
         </a>
 
         {adjunto.file_type?.startsWith('video/') && url && (
-          <video
-            controls
-            preload="metadata"
-            className="mt-1 max-h-64 w-full rounded-md bg-black"
-            onError={(e) => e.currentTarget.classList.add('hidden')}
-          >
-            <source src={url} type={adjunto.file_type} />
-            Tu navegador no puede reproducir este archivo. Descárgalo para verlo.
-          </video>
+          videoFallo ? (
+            <div className="mt-1 rounded-md bg-slate-100 p-3 text-xs text-slate-500">
+              <p>Tu navegador no puede reproducir este video.</p>
+              <a
+                href={url}
+                download={adjunto.file_name}
+                className="font-medium text-brand-700 hover:underline"
+              >
+                Descárgalo para verlo
+              </a>
+            </div>
+          ) : (
+            <video
+              controls
+              preload="metadata"
+              src={url}
+              className="mt-1 max-h-64 w-full rounded-md bg-black"
+              onError={() => setVideoFallo(true)}
+            />
+          )
         )}
       </div>
 
@@ -62,7 +76,11 @@ function FilaAdjunto({
               ref={inputVersionRef}
               type="file"
               className="hidden"
-              onChange={(e) => onSubirVersion(e.target.files, adjunto.id)}
+              onChange={(e) => {
+                const el = e.currentTarget;
+                onSubirVersion(el.files, adjunto.id);
+                el.value = '';
+              }}
               disabled={subiendoVersion}
             />
             <button
@@ -122,6 +140,13 @@ export function AttachmentUploader({
     }
 
     try {
+      // Una sola vez antes del bucle: no solo ahorra una ida y vuelta por archivo, evita que
+      // el token expire justo entre subirConProgreso (que ya dejó el objeto en el bucket) y
+      // registrarAdjunto (que es quien tiene la compensación para ese objeto).
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       // De a uno: varios videos en paralelo se estorban y ninguno termina.
       for (const file of seleccionados) {
         setProgreso({ nombre: file.name, porcentaje: 0 });
@@ -141,10 +166,6 @@ export function AttachmentUploader({
           onProgress: (porcentaje) => setProgreso({ nombre: file.name, porcentaje }),
         });
 
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
         await registrarAdjunto({
           supabase,
           contentPieceId: piece.id,
@@ -156,17 +177,25 @@ export function AttachmentUploader({
           replacesId,
         });
       }
-      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir el archivo.');
     } finally {
+      // En el finally, no solo en el camino feliz: si el segundo de tres archivos falla, el
+      // primero ya se insertó y la lista visible debe reflejarlo aunque el usuario también vea
+      // el error del segundo.
+      router.refresh();
       setProgreso(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
 
   function eliminar(id: string) {
-    deleteAttachment(id, piece.id).then(() => router.refresh());
+    setError(null);
+    deleteAttachment(id, piece.id)
+      .then(() => router.refresh())
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'No se pudo eliminar el archivo.');
+      });
   }
 
   const rondas = agruparPorRonda(attachments);
@@ -209,7 +238,7 @@ export function AttachmentUploader({
                             key={viejo.id}
                             adjunto={viejo}
                             url={urls[viejo.id]}
-                            canManage={false}
+                            canManage={canManage}
                             onEliminar={eliminar}
                           />
                         ))}
@@ -241,6 +270,10 @@ export function AttachmentUploader({
                 <div
                   className="h-full bg-brand-600 transition-all"
                   style={{ width: `${progreso.porcentaje}%` }}
+                  role="progressbar"
+                  aria-valuenow={progreso.porcentaje}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
                 />
               </div>
             </div>

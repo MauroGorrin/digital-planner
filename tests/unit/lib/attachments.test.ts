@@ -115,13 +115,17 @@ describe('registrarAdjunto', () => {
   function clienteFalso(errorDeInsert: { message: string } | null) {
     const insert = vi.fn().mockResolvedValue({ error: errorDeInsert });
     const remove = vi.fn().mockResolvedValue({ error: null });
+    const from = vi.fn(() => ({ insert }));
+    const storageFrom = vi.fn(() => ({ remove }));
     return {
       cliente: {
-        from: () => ({ insert }),
-        storage: { from: () => ({ remove }) },
+        from,
+        storage: { from: storageFrom },
       },
       insert,
       remove,
+      from,
+      storageFrom,
     };
   }
 
@@ -135,10 +139,11 @@ describe('registrarAdjunto', () => {
   };
 
   it('inserta la fila sin mandar review_round', async () => {
-    const { cliente, insert, remove } = clienteFalso(null);
+    const { cliente, insert, remove, from } = clienteFalso(null);
 
     await registrarAdjunto({ supabase: cliente, ...base });
 
+    expect(from).toHaveBeenCalledWith('attachments');
     expect(insert).toHaveBeenCalledTimes(1);
     const fila = insert.mock.calls[0][0];
     expect(fila).toMatchObject({
@@ -159,11 +164,12 @@ describe('registrarAdjunto', () => {
   });
 
   it('borra el objeto subido si falla el insert y avisa del error', async () => {
-    const { cliente, remove } = clienteFalso({ message: 'violacion de RLS' });
+    const { cliente, remove, storageFrom } = clienteFalso({ message: 'violacion de RLS' });
 
     await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
       /violacion de RLS/
     );
+    expect(storageFrom).toHaveBeenCalledWith('attachments');
     expect(remove).toHaveBeenCalledWith(['cliente-1/pieza-1/reel.mp4']);
   });
 
@@ -202,6 +208,24 @@ describe('registrarAdjunto', () => {
 
     await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
       /violacion de RLS/
+    );
+  });
+
+  it('si la limpieza falla con un mensaje vacio, igual reporta el fallo en vez del mensaje de exito', async () => {
+    // Un error con message: '' es tan "hubo fallo" como cualquier otro. Si la implementación
+    // usara ese string como bandera (truthy/falsy) en vez de un booleano explícito, este caso
+    // caería silenciosamente al mensaje de "se registró bien" para un archivo que en realidad
+    // quedó huérfano en el bucket.
+    const remove = vi
+      .fn<(rutas: string[]) => Promise<{ error: { message: string } | null }>>()
+      .mockResolvedValue({ error: { message: '' } });
+    const cliente = clienteConLimpieza({ message: 'violacion de RLS' }, remove);
+
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /tampoco se pudo limpiar/
+    );
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /cliente-1\/pieza-1\/reel\.mp4/
     );
   });
 });
@@ -264,6 +288,12 @@ describe('subirConProgreso', () => {
       for (const oyente of this.oyentesDeSubida.get('progress') ?? []) {
         oyente({ lengthComputable, loaded, total });
       }
+    }
+
+    /** El cuerpo del request terminó de enviarse (xhr.upload 'load'), antes de la respuesta
+     * del servidor — no confundir con disparaCarga(), que es la respuesta completa del xhr. */
+    disparaCargaDeSubida() {
+      for (const oyente of this.oyentesDeSubida.get('load') ?? []) oyente({});
     }
 
     disparaCarga(status: number) {
@@ -461,6 +491,31 @@ describe('subirConProgreso', () => {
 
       await expect(promesa).resolves.toBeUndefined();
       expect(xhr.abortLlamado).toBe(false);
+    });
+
+    it('no aborta por estancamiento si el cuerpo ya se envio y el servidor tarda en responder', async () => {
+      vi.useFakeTimers();
+      const obtenerXhr = instalarFalsoXHR();
+
+      const promesa = subirConProgreso({
+        signedUrl: 'https://ejemplo.local/subir?token=abc',
+        file: archivo,
+        onProgress: () => {},
+      });
+      const xhr = obtenerXhr();
+
+      xhr.disparaProgreso(200, 200); // el cuerpo terminó de transferirse...
+      xhr.disparaCargaDeSubida(); // ...y xhr.upload dispara 'load': ya no habrá más progreso.
+
+      // El servidor tarda más de un minuto en finalizar el objeto (200 MB). Sin más eventos de
+      // progreso que lo reinicien, un vigilante que siguiera armado abortaría acá una subida que
+      // en realidad terminó bien.
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      expect(xhr.abortLlamado).toBe(false);
+
+      xhr.disparaCarga(200);
+      await expect(promesa).resolves.toBeUndefined();
     });
   });
 });

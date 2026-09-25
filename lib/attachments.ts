@@ -132,15 +132,24 @@ export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void
   });
 
   if (error) {
-    let motivoDeLimpieza: string | null = null;
+    // Bandera explícita, no el string del mensaje: un error con message: '' es igual de "hubo
+    // fallo" que uno con texto, y si se usara el string como bandera (truthy/falsy) ese caso
+    // caería al mensaje de éxito para un archivo que en realidad quedó huérfano — justo lo que
+    // esta rama existe para evitar.
+    let limpiezaFallo = false;
+    let motivoDeLimpieza = '';
     try {
       const { error: errorDeLimpieza } = await supabase.storage.from('attachments').remove([filePath]);
-      if (errorDeLimpieza) motivoDeLimpieza = errorDeLimpieza.message;
+      if (errorDeLimpieza) {
+        limpiezaFallo = true;
+        motivoDeLimpieza = errorDeLimpieza.message;
+      }
     } catch (excepcion) {
+      limpiezaFallo = true;
       motivoDeLimpieza = excepcion instanceof Error ? excepcion.message : String(excepcion);
     }
 
-    if (motivoDeLimpieza) {
+    if (limpiezaFallo) {
       throw new Error(
         `No se pudo registrar el archivo (${error.message}) y tampoco se pudo limpiar el archivo ya subido (${motivoDeLimpieza}). Quedó en el almacenamiento como ${filePath}.`
       );
@@ -197,6 +206,16 @@ export function subirConProgreso(opciones: {
       if (evento.lengthComputable) {
         opciones.onProgress(Math.round((evento.loaded / evento.total) * 100));
       }
+    });
+
+    // xhr.upload 'load' se dispara cuando el cuerpo terminó de enviarse, antes de la respuesta
+    // del servidor. A partir de ahí no va a haber más eventos de progreso mientras el servidor
+    // finaliza el objeto (puede tardar, con 200 MB), y el vigilante —que solo se reinicia con
+    // progreso— daría un falso positivo justo cuando la subida en realidad ya terminó bien.
+    // Lo desarmamos del todo acá: xhr.addEventListener('load'/'error') más abajo son quienes
+    // resuelven la promesa a partir de este punto, y ya no dependen de ningún plazo nuestro.
+    xhr.upload.addEventListener('load', () => {
+      limpiarVigilante();
     });
 
     xhr.addEventListener('load', () => {
