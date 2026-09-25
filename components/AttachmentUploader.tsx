@@ -4,24 +4,61 @@ import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { deleteAttachment } from '@/app/actions';
-import { registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
+import { agruparPorRonda, formatearBytes, registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
-
-function formatBytes(bytes: number | null) {
-  if (!bytes) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let i = 0;
-  let val = bytes;
-  while (val >= 1024 && i < units.length - 1) {
-    val /= 1024;
-    i++;
-  }
-  return `${val.toFixed(1)} ${units[i]}`;
-}
 
 interface ProgresoDeArchivo {
   nombre: string;
   porcentaje: number;
+}
+
+function FilaAdjunto({
+  adjunto,
+  url,
+  canManage,
+  onEliminar,
+}: {
+  adjunto: Attachment;
+  url: string | undefined;
+  canManage: boolean;
+  onEliminar: (id: string) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <a href={url} target="_blank" rel="noreferrer">
+          <p className="truncate text-sm font-medium text-brand-700">{adjunto.file_name}</p>
+          <p className="text-xs text-slate-400">{formatearBytes(adjunto.file_size ?? 0)}</p>
+
+          {adjunto.file_type?.startsWith('image/') && url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt={adjunto.file_name} className="mt-1 h-20 rounded-md object-cover" />
+          )}
+        </a>
+
+        {adjunto.file_type?.startsWith('video/') && url && (
+          <video
+            controls
+            preload="metadata"
+            className="mt-1 max-h-64 w-full rounded-md bg-black"
+            onError={(e) => e.currentTarget.classList.add('hidden')}
+          >
+            <source src={url} type={adjunto.file_type} />
+            Tu navegador no puede reproducir este archivo. Descárgalo para verlo.
+          </video>
+        )}
+      </div>
+
+      {canManage && (
+        <button
+          onClick={() => onEliminar(adjunto.id)}
+          className="text-xs text-red-500 hover:underline"
+        >
+          Eliminar
+        </button>
+      )}
+    </div>
+  );
 }
 
 export function AttachmentUploader({
@@ -99,40 +136,59 @@ export function AttachmentUploader({
     }
   }
 
+  function eliminar(id: string) {
+    deleteAttachment(id, piece.id).then(() => router.refresh());
+  }
+
+  const rondas = agruparPorRonda(attachments);
+  const rondaVigente = rondas[0]?.ronda;
+
   return (
     <div>
       <div className="space-y-2">
-        {attachments.length === 0 && <p className="text-sm text-slate-400">Sin adjuntos todavía.</p>}
-        {attachments.map((a) => (
-          <div key={a.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-            <div className="flex items-center justify-between gap-2">
-              <a href={urls[a.id]} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-brand-700">{a.file_name}</p>
-                <p className="text-xs text-slate-400">{formatBytes(a.file_size)}</p>
-                {a.file_type?.startsWith('image/') && urls[a.id] && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={urls[a.id]} alt={a.file_name} className="mt-1 h-20 rounded-md object-cover" />
-                )}
-              </a>
-              {canManage && (
-                <button onClick={() => deleteAttachment(a.id, piece.id).then(() => router.refresh())} className="text-xs text-red-500 hover:underline">
-                  Eliminar
-                </button>
-              )}
-            </div>
+        {rondas.length === 0 && <p className="text-sm text-slate-400">Sin adjuntos todavía.</p>}
 
-            {a.file_type?.startsWith('video/') && urls[a.id] && (
-              <video
-                controls
-                preload="metadata"
-                className="mt-1 max-h-64 w-full rounded-md bg-black"
-                onError={(e) => e.currentTarget.classList.add('hidden')}
-              >
-                <source src={urls[a.id]} type={a.file_type} />
-                Tu navegador no puede reproducir este archivo. Descargalo para verlo.
-              </video>
-            )}
-          </div>
+        {rondas.map((ronda) => (
+          <details key={ronda.ronda} open={ronda.ronda === rondaVigente} className="mt-2">
+            <summary className="cursor-pointer text-xs font-medium text-slate-500">
+              {ronda.ronda === rondaVigente ? 'Versión actual' : `Ronda ${ronda.ronda}`} —{' '}
+              {ronda.adjuntos.length} {ronda.adjuntos.length === 1 ? 'archivo' : 'archivos'}
+            </summary>
+
+            <div className="mt-2 space-y-2">
+              {ronda.adjuntos.map((entrada) => (
+                <div key={entrada.vigente.id}>
+                  <FilaAdjunto
+                    adjunto={entrada.vigente}
+                    url={urls[entrada.vigente.id]}
+                    canManage={canManage}
+                    onEliminar={eliminar}
+                  />
+
+                  {entrada.reemplazados.length > 0 && (
+                    <details className="mt-1 pl-3">
+                      <summary className="cursor-pointer text-xs text-slate-400">
+                        {entrada.reemplazados.length} versión
+                        {entrada.reemplazados.length === 1 ? '' : 'es'} anterior
+                        {entrada.reemplazados.length === 1 ? '' : 'es'}
+                      </summary>
+                      <div className="mt-1 space-y-1 opacity-60">
+                        {entrada.reemplazados.map((viejo) => (
+                          <FilaAdjunto
+                            key={viejo.id}
+                            adjunto={viejo}
+                            url={urls[viejo.id]}
+                            canManage={false}
+                            onEliminar={eliminar}
+                          />
+                        ))}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
         ))}
       </div>
       {canManage && (
