@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   TAMANO_MAXIMO_BYTES,
   agruparPorRonda,
   formatearBytes,
   registrarAdjunto,
+  subirConProgreso,
   validarArchivo,
 } from '@/lib/attachments';
 import type { ClienteAdjuntos } from '@/lib/attachments';
@@ -202,5 +203,199 @@ describe('registrarAdjunto', () => {
     await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
       /violacion de RLS/
     );
+  });
+});
+
+describe('subirConProgreso', () => {
+  /**
+   * Doble de XMLHttpRequest que expone los mismos "hooks" (open, setRequestHeader,
+   * upload.addEventListener, addEventListener, send) que usa la implementación, y deja
+   * que la prueba dispare los eventos de progreso/load/error/abort a mano con los bytes
+   * que quiera — así se puede afirmar que el porcentaje sale de loaded/total del evento,
+   * no que onProgress simplemente fue llamado.
+   */
+  class FalsoXHR {
+    static ultimaInstancia: FalsoXHR;
+
+    metodo = '';
+    url = '';
+    cabeceras: Record<string, string> = {};
+    status = 0;
+    cuerpoEnviado: unknown = null;
+    private oyentesDeCarga = new Map<string, Array<(evento: unknown) => void>>();
+    private oyentesDeSubida = new Map<string, Array<(evento: unknown) => void>>();
+
+    upload = {
+      addEventListener: (tipo: string, oyente: (evento: unknown) => void) => {
+        const lista = this.oyentesDeSubida.get(tipo) ?? [];
+        lista.push(oyente);
+        this.oyentesDeSubida.set(tipo, lista);
+      },
+    };
+
+    constructor() {
+      FalsoXHR.ultimaInstancia = this;
+    }
+
+    open(metodo: string, url: string) {
+      this.metodo = metodo;
+      this.url = url;
+    }
+
+    setRequestHeader(nombre: string, valor: string) {
+      this.cabeceras[nombre] = valor;
+    }
+
+    addEventListener(tipo: string, oyente: (evento: unknown) => void) {
+      const lista = this.oyentesDeCarga.get(tipo) ?? [];
+      lista.push(oyente);
+      this.oyentesDeCarga.set(tipo, lista);
+    }
+
+    send(cuerpo: unknown) {
+      this.cuerpoEnviado = cuerpo;
+    }
+
+    disparaProgreso(loaded: number, total: number, lengthComputable = true) {
+      for (const oyente of this.oyentesDeSubida.get('progress') ?? []) {
+        oyente({ lengthComputable, loaded, total });
+      }
+    }
+
+    disparaCarga(status: number) {
+      this.status = status;
+      for (const oyente of this.oyentesDeCarga.get('load') ?? []) oyente({});
+    }
+
+    disparaError() {
+      for (const oyente of this.oyentesDeCarga.get('error') ?? []) oyente({});
+    }
+
+    disparaAbort() {
+      for (const oyente of this.oyentesDeCarga.get('abort') ?? []) oyente({});
+    }
+  }
+
+  function instalarFalsoXHR() {
+    vi.stubGlobal('XMLHttpRequest', FalsoXHR);
+    return () => FalsoXHR.ultimaInstancia;
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const archivo = new File(['contenido de prueba'], 'reel.mp4', { type: 'video/mp4' });
+
+  it('calcula el porcentaje a partir de loaded/total del evento, no solo dispara onProgress', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const porcentajes: number[] = [];
+
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: (pct) => porcentajes.push(pct),
+    });
+
+    const xhr = obtenerXhr();
+    // Bytes concretos, no fracciones redondas: si la implementación solo simulara progreso
+    // (p. ej. incrementos fijos) estos porcentajes exactos no coincidirían.
+    xhr.disparaProgreso(37, 200); // 18.5% -> redondea a 19
+    xhr.disparaProgreso(150, 200); // 75%
+    xhr.disparaProgreso(200, 200); // 100%
+    xhr.disparaCarga(200);
+
+    await promesa;
+
+    expect(porcentajes).toEqual([19, 75, 100]);
+  });
+
+  it('ignora eventos de progreso sin longitud computable, en vez de inventar un porcentaje', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const porcentajes: number[] = [];
+
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: (pct) => porcentajes.push(pct),
+    });
+
+    const xhr = obtenerXhr();
+    xhr.disparaProgreso(10, 0, false);
+    xhr.disparaCarga(200);
+
+    await promesa;
+
+    expect(porcentajes).toEqual([]);
+  });
+
+  it('abre un PUT a la URL firmada y manda el content-type del archivo', () => {
+    const obtenerXhr = instalarFalsoXHR();
+
+    void subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: () => {},
+    });
+
+    const xhr = obtenerXhr();
+    expect(xhr.metodo).toBe('PUT');
+    expect(xhr.url).toBe('https://ejemplo.local/subir?token=abc');
+    expect(xhr.cabeceras['content-type']).toBe('video/mp4');
+    expect(xhr.cuerpoEnviado).toBe(archivo);
+
+    xhr.disparaCarga(200);
+  });
+
+  it('resuelve cuando el status HTTP esta en el rango 2xx', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: () => {},
+    });
+
+    obtenerXhr().disparaCarga(204);
+
+    await expect(promesa).resolves.toBeUndefined();
+  });
+
+  it('rechaza con un mensaje accionable en espanol si el status no es 2xx', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: () => {},
+    });
+
+    obtenerXhr().disparaCarga(500);
+
+    await expect(promesa).rejects.toThrow(/500/);
+  });
+
+  it('rechaza con un mensaje en espanol si se corta la conexion', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: () => {},
+    });
+
+    obtenerXhr().disparaError();
+
+    await expect(promesa).rejects.toThrow(/conexión|conexion/i);
+  });
+
+  it('rechaza con un mensaje en espanol si la subida se cancela', async () => {
+    const obtenerXhr = instalarFalsoXHR();
+    const promesa = subirConProgreso({
+      signedUrl: 'https://ejemplo.local/subir?token=abc',
+      file: archivo,
+      onProgress: () => {},
+    });
+
+    obtenerXhr().disparaAbort();
+
+    await expect(promesa).rejects.toThrow(/cancel/i);
   });
 });

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { deleteAttachment } from '@/app/actions';
+import { registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
 
 function formatBytes(bytes: number | null) {
@@ -17,6 +19,11 @@ function formatBytes(bytes: number | null) {
   return `${val.toFixed(1)} ${units[i]}`;
 }
 
+interface ProgresoDeArchivo {
+  nombre: string;
+  porcentaje: number;
+}
+
 export function AttachmentUploader({
   piece,
   attachments,
@@ -27,8 +34,9 @@ export function AttachmentUploader({
   canManage: boolean;
 }) {
   const supabase = createClient();
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
+  const [progreso, setProgreso] = useState<ProgresoDeArchivo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [urls, setUrls] = useState<Record<string, string>>({});
 
@@ -48,33 +56,60 @@ export function AttachmentUploader({
     };
   }, [attachments, supabase]);
 
-  async function handleUpload(files: FileList | null) {
+  async function handleUpload(files: FileList | null, replacesId: string | null = null) {
     if (!files || files.length === 0) return;
-    setUploading(true);
     setError(null);
+
+    const seleccionados = Array.from(files);
+    for (const file of seleccionados) {
+      const problema = validarArchivo(file);
+      if (problema) {
+        setError(problema);
+        if (inputRef.current) inputRef.current.value = '';
+        return;
+      }
+    }
+
     try {
-      for (const file of Array.from(files)) {
+      // De a uno: varios videos en paralelo se estorban y ninguno termina.
+      for (const file of seleccionados) {
+        setProgreso({ nombre: file.name, porcentaje: 0 });
+
         const path = `${piece.client_id}/${piece.id}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
-        const { error: uploadError } = await supabase.storage.from('attachments').upload(path, file);
-        if (uploadError) throw uploadError;
+
+        const { data: firmada, error: errorFirma } = await supabase.storage
+          .from('attachments')
+          .createSignedUploadUrl(path);
+        if (errorFirma || !firmada) {
+          throw new Error(errorFirma?.message ?? 'No se pudo preparar la subida.');
+        }
+
+        await subirConProgreso({
+          signedUrl: firmada.signedUrl,
+          file,
+          onProgress: (porcentaje) => setProgreso({ nombre: file.name, porcentaje }),
+        });
+
         const {
           data: { user },
         } = await supabase.auth.getUser();
-        const { error: insertError } = await supabase.from('attachments').insert({
-          content_piece_id: piece.id,
-          file_path: path,
-          file_name: file.name,
-          file_type: file.type,
-          file_size: file.size,
-          uploaded_by: user?.id,
+
+        await registrarAdjunto({
+          supabase,
+          contentPieceId: piece.id,
+          filePath: path,
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          uploadedBy: user?.id ?? null,
+          replacesId,
         });
-        if (insertError) throw insertError;
       }
-      window.location.reload();
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo subir el archivo.');
     } finally {
-      setUploading(false);
+      setProgreso(null);
       if (inputRef.current) inputRef.current.value = '';
     }
   }
@@ -94,7 +129,7 @@ export function AttachmentUploader({
               )}
             </a>
             {canManage && (
-              <button onClick={() => deleteAttachment(a.id, piece.id).then(() => window.location.reload())} className="text-xs text-red-500 hover:underline">
+              <button onClick={() => deleteAttachment(a.id, piece.id).then(() => router.refresh())} className="text-xs text-red-500 hover:underline">
                 Eliminar
               </button>
             )}
@@ -108,10 +143,22 @@ export function AttachmentUploader({
             type="file"
             multiple
             onChange={(e) => handleUpload(e.target.files)}
-            disabled={uploading}
+            disabled={progreso !== null}
             className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-brand-700 hover:file:bg-brand-100"
           />
-          {uploading && <p className="mt-1 text-xs text-slate-400">Subiendo…</p>}
+          {progreso && (
+            <div className="mt-2">
+              <p className="text-xs text-slate-500">
+                Subiendo {progreso.nombre} — {progreso.porcentaje}%
+              </p>
+              <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full bg-brand-600 transition-all"
+                  style={{ width: `${progreso.porcentaje}%` }}
+                />
+              </div>
+            </div>
+          )}
           {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
         </div>
       )}

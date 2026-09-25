@@ -148,3 +148,36 @@ export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void
     throw new Error(`No se pudo registrar el archivo: ${error.message}`);
   }
 }
+
+/**
+ * Sube un archivo a una URL firmada con XMLHttpRequest, que es la única forma de obtener
+ * progreso real: el upload() del SDK usa fetch, que no emite eventos de progreso.
+ */
+export function subirConProgreso(opciones: {
+  signedUrl: string;
+  file: File;
+  onProgress: (porcentaje: number) => void;
+}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', opciones.signedUrl);
+    xhr.setRequestHeader('content-type', opciones.file.type);
+
+    xhr.upload.addEventListener('progress', (evento) => {
+      if (evento.lengthComputable) {
+        opciones.onProgress(Math.round((evento.loaded / evento.total) * 100));
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`La subida falló (HTTP ${xhr.status}). Vuelve a intentarlo.`));
+    });
+    xhr.addEventListener('error', () =>
+      reject(new Error('Se cortó la conexión durante la subida. Vuelve a intentarlo.'))
+    );
+    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada.')));
+
+    xhr.send(opciones.file);
+  });
+}
