@@ -26,6 +26,7 @@ export function ContentPieceDetail({
   profile,
   piece,
   attachments,
+  urls,
   comments,
   history,
   isClientContact,
@@ -33,6 +34,7 @@ export function ContentPieceDetail({
   profile: Profile;
   piece: ContentPiece & { clients: Client };
   attachments: Attachment[];
+  urls: Record<string, string>;
   comments: Comment[];
   history: StatusHistoryEntry[];
   isClientContact: boolean;
@@ -261,7 +263,7 @@ export function ContentPieceDetail({
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="mb-3 text-sm font-semibold text-slate-800">Archivos adjuntos</h2>
-          <AttachmentUploader piece={piece} attachments={attachments} canManage={isAgency} />
+          <AttachmentUploader piece={piece} attachments={attachments} urls={urls} canManage={isAgency} />
         </div>
         <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="mb-3 text-sm font-semibold text-slate-800">Historial de cambios</h2>

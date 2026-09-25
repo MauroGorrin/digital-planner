@@ -33,12 +33,28 @@ export default async function ContentPiecePage({ params }: { params: { id: strin
 
   const isClientContact = profile.role === 'client';
 
+  const listaAdjuntos = (attachments ?? []) as Attachment[];
+
+  const urlsFirmadas: Record<string, string> = {};
+  if (listaAdjuntos.length > 0) {
+    const { data: firmadas } = await supabase.storage
+      .from('attachments')
+      .createSignedUrls(
+        listaAdjuntos.map((a) => a.file_path),
+        3600
+      );
+    for (const [i, firmada] of (firmadas ?? []).entries()) {
+      if (firmada.signedUrl) urlsFirmadas[listaAdjuntos[i].id] = firmada.signedUrl;
+    }
+  }
+
   return (
     <AppShell profile={profile}>
       <ContentPieceDetail
         profile={profile}
         piece={piece as ContentPiece & { clients: Client }}
-        attachments={(attachments ?? []) as Attachment[]}
+        attachments={listaAdjuntos}
+        urls={urlsFirmadas}
         comments={(comments ?? []) as Comment[]}
         history={(history ?? []) as StatusHistoryEntry[]}
         isClientContact={isClientContact}

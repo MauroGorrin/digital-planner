@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { deleteAttachment } from '@/app/actions';
@@ -27,10 +27,12 @@ interface ProgresoDeArchivo {
 export function AttachmentUploader({
   piece,
   attachments,
+  urls,
   canManage,
 }: {
   piece: ContentPiece & { clients: Client };
   attachments: Attachment[];
+  urls: Record<string, string>;
   canManage: boolean;
 }) {
   const supabase = createClient();
@@ -38,23 +40,6 @@ export function AttachmentUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const [progreso, setProgreso] = useState<ProgresoDeArchivo | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [urls, setUrls] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const entries = await Promise.all(
-        attachments.map(async (a) => {
-          const { data } = await supabase.storage.from('attachments').createSignedUrl(a.file_path, 3600);
-          return [a.id, data?.signedUrl ?? ''] as const;
-        })
-      );
-      if (active) setUrls(Object.fromEntries(entries));
-    })();
-    return () => {
-      active = false;
-    };
-  }, [attachments, supabase]);
 
   async function handleUpload(files: FileList | null, replacesId: string | null = null) {
     if (!files || files.length === 0) return;
@@ -119,19 +104,33 @@ export function AttachmentUploader({
       <div className="space-y-2">
         {attachments.length === 0 && <p className="text-sm text-slate-400">Sin adjuntos todavía.</p>}
         {attachments.map((a) => (
-          <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-            <a href={urls[a.id]} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-brand-700">{a.file_name}</p>
-              <p className="text-xs text-slate-400">{formatBytes(a.file_size)}</p>
-              {a.file_type?.startsWith('image/') && urls[a.id] && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={urls[a.id]} alt={a.file_name} className="mt-1 h-20 rounded-md object-cover" />
+          <div key={a.id} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+            <div className="flex items-center justify-between gap-2">
+              <a href={urls[a.id]} target="_blank" rel="noreferrer" className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-brand-700">{a.file_name}</p>
+                <p className="text-xs text-slate-400">{formatBytes(a.file_size)}</p>
+                {a.file_type?.startsWith('image/') && urls[a.id] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={urls[a.id]} alt={a.file_name} className="mt-1 h-20 rounded-md object-cover" />
+                )}
+              </a>
+              {canManage && (
+                <button onClick={() => deleteAttachment(a.id, piece.id).then(() => router.refresh())} className="text-xs text-red-500 hover:underline">
+                  Eliminar
+                </button>
               )}
-            </a>
-            {canManage && (
-              <button onClick={() => deleteAttachment(a.id, piece.id).then(() => router.refresh())} className="text-xs text-red-500 hover:underline">
-                Eliminar
-              </button>
+            </div>
+
+            {a.file_type?.startsWith('video/') && urls[a.id] && (
+              <video
+                controls
+                preload="metadata"
+                className="mt-1 max-h-64 w-full rounded-md bg-black"
+                onError={(e) => e.currentTarget.classList.add('hidden')}
+              >
+                <source src={urls[a.id]} type={a.file_type} />
+                Tu navegador no puede reproducir este archivo. Descargalo para verlo.
+              </video>
             )}
           </div>
         ))}
