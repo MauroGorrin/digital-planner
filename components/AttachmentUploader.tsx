@@ -105,7 +105,7 @@ function FilaAdjunto({
                   value={textoComentario}
                   onChange={(e) => setTextoComentario(e.target.value)}
                   rows={2}
-                  placeholder="Que hay que corregir en este momento?"
+                  placeholder="¿Qué hay que corregir en este momento?"
                   className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
                 />
                 <div className="mt-1 flex justify-end gap-2">
@@ -128,6 +128,10 @@ function FilaAdjunto({
                         await onComentar(adjunto.id, comentando, textoComentario.trim());
                         setComentando(null);
                         setTextoComentario('');
+                      } catch {
+                        // comentarEnVideo ya mostró el error con setError; el formulario se
+                        // queda abierto con el texto intacto para que el usuario pueda
+                        // reintentar sin tener que volver a escribirlo.
                       } finally {
                         setEnviandoComentario(false);
                       }
@@ -278,6 +282,7 @@ export function AttachmentUploader({
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo guardar el comentario.');
+      throw err;
     }
   }
 
