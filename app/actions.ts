@@ -214,12 +214,22 @@ export async function cancelPiece(id: string, reason: string) {
   revalidatePath(`/piezas/${id}`);
 }
 
-export async function addComment(id: string, body: string, parentId?: string) {
+export async function addComment(
+  id: string,
+  body: string,
+  parentId?: string,
+  ancla?: { attachmentId: string; videoSegundo: number }
+) {
   const profile = await requireProfile();
   const supabase = createClient();
-  const { error } = await supabase
-    .from('comments')
-    .insert({ content_piece_id: id, author_id: profile.id, body, parent_comment_id: parentId ?? null });
+  const { error } = await supabase.from('comments').insert({
+    content_piece_id: id,
+    author_id: profile.id,
+    body,
+    parent_comment_id: parentId ?? null,
+    attachment_id: ancla?.attachmentId ?? null,
+    video_segundo: ancla?.videoSegundo ?? null,
+  });
   if (error) throw new Error(error.message);
 
   const piece = await loadPieceWithClient(id);

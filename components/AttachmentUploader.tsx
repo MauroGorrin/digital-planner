@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { deleteAttachment } from '@/app/actions';
+import { addComment, deleteAttachment } from '@/app/actions';
 import { agruparPorRonda, formatearBytes, registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
+import { formatearSegundos } from '@/lib/comentarios';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
 
 interface ProgresoDeArchivo {
@@ -19,6 +20,7 @@ function FilaAdjunto({
   onEliminar,
   onSubirVersion,
   subiendoVersion,
+  onComentar,
 }: {
   adjunto: Attachment;
   url: string | undefined;
@@ -26,9 +28,14 @@ function FilaAdjunto({
   onEliminar: (id: string) => void;
   onSubirVersion?: (files: FileList | null, replacesId: string) => void;
   subiendoVersion?: boolean;
+  onComentar?: (attachmentId: string, segundo: number, texto: string) => Promise<void>;
 }) {
   const inputVersionRef = useRef<HTMLInputElement>(null);
   const [videoFallo, setVideoFallo] = useState(false);
+  const [segundoActual, setSegundoActual] = useState(0);
+  const [comentando, setComentando] = useState<number | null>(null);
+  const [textoComentario, setTextoComentario] = useState('');
+  const [enviandoComentario, setEnviandoComentario] = useState(false);
 
   // La fila conserva identidad por su `key` entre renders (p. ej. tras un router.refresh() que
   // trae una URL firmada nueva), así que este estado sobreviviría a un error transitorio (URL
@@ -68,13 +75,71 @@ function FilaAdjunto({
             </div>
           ) : (
             <video
+              id={`video-${adjunto.id}`}
               controls
               preload="metadata"
               src={url}
               className="mt-1 max-h-64 w-full rounded-md bg-black"
               onError={() => setVideoFallo(true)}
+              onTimeUpdate={(e) => setSegundoActual(e.currentTarget.currentTime)}
             />
           )
+        )}
+
+        {adjunto.file_type?.startsWith('video/') && url && !videoFallo && onComentar && (
+          <div className="mt-1">
+            {comentando === null ? (
+              <button
+                type="button"
+                onClick={() => setComentando(Math.floor(segundoActual))}
+                className="text-xs font-medium text-brand-600 hover:underline"
+              >
+                Comentar en {formatearSegundos(segundoActual)}
+              </button>
+            ) : (
+              <div className="rounded-md border border-slate-200 bg-white p-2">
+                <p className="mb-1 text-[11px] text-slate-500">
+                  Comentario en {formatearSegundos(comentando)}
+                </p>
+                <textarea
+                  value={textoComentario}
+                  onChange={(e) => setTextoComentario(e.target.value)}
+                  rows={2}
+                  placeholder="Que hay que corregir en este momento?"
+                  className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
+                />
+                <div className="mt-1 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComentando(null);
+                      setTextoComentario('');
+                    }}
+                    className="text-xs text-slate-500 hover:underline"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={enviandoComentario || !textoComentario.trim()}
+                    onClick={async () => {
+                      setEnviandoComentario(true);
+                      try {
+                        await onComentar(adjunto.id, comentando, textoComentario.trim());
+                        setComentando(null);
+                        setTextoComentario('');
+                      } finally {
+                        setEnviandoComentario(false);
+                      }
+                    }}
+                    className="text-xs font-medium text-brand-600 hover:underline disabled:text-slate-400"
+                  >
+                    {enviandoComentario ? 'Enviando...' : 'Comentar'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -207,6 +272,15 @@ export function AttachmentUploader({
       });
   }
 
+  async function comentarEnVideo(attachmentId: string, segundo: number, texto: string) {
+    try {
+      await addComment(piece.id, texto, undefined, { attachmentId, videoSegundo: segundo });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar el comentario.');
+    }
+  }
+
   const rondas = agruparPorRonda(attachments);
   const rondaVigente = rondas[0]?.ronda;
 
@@ -232,6 +306,7 @@ export function AttachmentUploader({
                     onEliminar={eliminar}
                     onSubirVersion={canManage ? handleUpload : undefined}
                     subiendoVersion={progreso !== null}
+                    onComentar={comentarEnVideo}
                   />
 
                   {entrada.reemplazados.length > 0 && (
@@ -249,6 +324,7 @@ export function AttachmentUploader({
                             url={urls[viejo.id]}
                             canManage={canManage}
                             onEliminar={eliminar}
+                            onComentar={comentarEnVideo}
                           />
                         ))}
                       </div>
