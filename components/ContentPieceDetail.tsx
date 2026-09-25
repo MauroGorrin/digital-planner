@@ -287,7 +287,7 @@ export function ContentPieceDetail({
 
       <div className="mt-4 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h2 className="mb-3 text-sm font-semibold text-slate-800">Comentarios</h2>
-        <CommentThread pieceId={piece.id} comments={comments} profile={profile} />
+        <CommentThread pieceId={piece.id} comments={comments} profile={profile} attachments={attachments} />
       </div>
     </div>
   );

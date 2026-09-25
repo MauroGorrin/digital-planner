@@ -2,8 +2,9 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Comment, Profile } from '@/types/database';
+import type { Attachment, Comment, Profile } from '@/types/database';
 import { addComment } from '@/app/actions';
+import { estaReemplazado, formatearSegundos, saltarAlSegundo } from '@/lib/comentarios';
 
 function roleLabel(role?: string) {
   if (role === 'agency_admin') return 'Agencia · Admin';
@@ -12,7 +13,17 @@ function roleLabel(role?: string) {
   return '';
 }
 
-export function CommentThread({ pieceId, comments, profile }: { pieceId: string; comments: Comment[]; profile: Profile }) {
+export function CommentThread({
+  pieceId,
+  comments,
+  profile,
+  attachments,
+}: {
+  pieceId: string;
+  comments: Comment[];
+  profile: Profile;
+  attachments: Attachment[];
+}) {
   const router = useRouter();
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -39,6 +50,30 @@ export function CommentThread({ pieceId, comments, profile }: { pieceId: string;
               <span className="text-[11px] text-slate-400">{roleLabel(c.author?.role)}</span>
             </div>
             <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{c.body}</p>
+            {c.video_segundo !== null && (
+              <div className="mt-1">
+                {c.attachment_id ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      saltarAlSegundo(
+                        document.getElementById(`video-${c.attachment_id}`) as HTMLVideoElement | null,
+                        c.video_segundo!
+                      )
+                    }
+                    className="rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 hover:underline"
+                  >
+                    {attachments.find((a) => a.id === c.attachment_id)?.file_name ?? 'Archivo'} ·{' '}
+                    {formatearSegundos(c.video_segundo)}
+                    {estaReemplazado(c.attachment_id, attachments) ? ' · versión anterior' : ''}
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    Apuntaba a {formatearSegundos(c.video_segundo)} de un archivo que ya fue eliminado
+                  </span>
+                )}
+              </div>
+            )}
             <div className="mt-1 flex items-center gap-3">
               <span className="text-[11px] text-slate-400">{new Date(c.created_at).toLocaleString('es-MX')}</span>
               <button onClick={() => setReplyTo(c.id)} className="text-[11px] font-medium text-brand-600 hover:underline">
