@@ -25,11 +25,20 @@ begin
 end;
 $$;
 
+drop trigger if exists attachments_set_round on attachments;
 create trigger attachments_set_round
   before insert on attachments
   for each row execute function set_attachment_round();
 
 -- Limites explicitos del bucket. Sin esto hereda el default del proyecto (50 MB).
+--
+-- ADVERTENCIA PARA QUIEN APLIQUE ESTO EN OTRO ENTORNO: Supabase aplica
+-- min(limite global del proyecto, limite del bucket). Este update solo fija el limite del
+-- bucket; no valida ni sube el limite global del proyecto. Si el proyecto sigue en su default
+-- (50 MB), la fila de storage.buckets dira 200 MB pero un archivo de 150 MB seguira fallando
+-- igual. Antes de aplicar esta migracion en un proyecto nuevo, sube el limite global desde el
+-- panel de Supabase: Settings -> Storage -> "Upload file size limit" (>= 200 MB). Ese paso es
+-- manual y no lo hace esta migracion.
 update storage.buckets
 set file_size_limit = 209715200,
     allowed_mime_types = array[
