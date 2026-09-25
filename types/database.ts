@@ -133,6 +133,8 @@ export interface Comment {
   author_id: string | null;
   body: string;
   parent_comment_id: string | null;
+  attachment_id: string | null;
+  video_segundo: number | null;
   created_at: string;
   author?: Pick<Profile, 'id' | 'full_name' | 'role'> | null;
 }
