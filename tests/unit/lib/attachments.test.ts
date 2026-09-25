@@ -222,6 +222,10 @@ describe('subirConProgreso', () => {
     cabeceras: Record<string, string> = {};
     status = 0;
     cuerpoEnviado: unknown = null;
+    /** Si el código bajo prueba llamó a xhr.abort() (a diferencia de disparaAbort(), que
+     * simula el evento nativo sin pasar por ese método — p. ej. un abort disparado por el
+     * navegador mismo). */
+    abortLlamado = false;
     private oyentesDeCarga = new Map<string, Array<(evento: unknown) => void>>();
     private oyentesDeSubida = new Map<string, Array<(evento: unknown) => void>>();
 
@@ -273,6 +277,11 @@ describe('subirConProgreso', () => {
 
     disparaAbort() {
       for (const oyente of this.oyentesDeCarga.get('abort') ?? []) oyente({});
+    }
+
+    abort() {
+      this.abortLlamado = true;
+      this.disparaAbort();
     }
   }
 
@@ -397,5 +406,61 @@ describe('subirConProgreso', () => {
     obtenerXhr().disparaAbort();
 
     await expect(promesa).rejects.toThrow(/cancel/i);
+  });
+
+  describe('vigilante de estancamiento', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('aborta y rechaza con un mensaje de estancamiento si pasa el umbral sin ningun avance', async () => {
+      vi.useFakeTimers();
+      const obtenerXhr = instalarFalsoXHR();
+
+      const promesa = subirConProgreso({
+        signedUrl: 'https://ejemplo.local/subir?token=abc',
+        file: archivo,
+        onProgress: () => {},
+      });
+      // Se adjunta el manejador de rechazo ya, antes de avanzar el reloj falso: si se espera
+      // a que la promesa ya haya rechazado para recién entonces encadenar `.rejects`, Node la
+      // marca como "unhandled rejection" en el instante entre el reject() sincrónico del
+      // temporizador y el await de esta prueba.
+      const promesaRechazada = expect(promesa).rejects.toThrow(/estanc/i);
+      const xhr = obtenerXhr();
+
+      xhr.disparaProgreso(10, 200); // hay algo de avance...
+      await vi.advanceTimersByTimeAsync(61_000); // ...y despues nada, por mas de 60s (el umbral)
+
+      await promesaRechazada;
+      expect(xhr.abortLlamado).toBe(true);
+    });
+
+    it('no aborta por estancamiento si el progreso llega espaciado, aunque el tiempo total supere el umbral varias veces', async () => {
+      vi.useFakeTimers();
+      const obtenerXhr = instalarFalsoXHR();
+
+      const promesa = subirConProgreso({
+        signedUrl: 'https://ejemplo.local/subir?token=abc',
+        file: archivo,
+        onProgress: () => {},
+      });
+      const xhr = obtenerXhr();
+
+      // Cada intervalo entre eventos de progreso queda bien por debajo del umbral (60s), pero
+      // la suma de los cinco (250s) lo supera varias veces. Si el arreglo fuera un tope de
+      // tiempo total disfrazado de vigilante de estancamiento (p. ej. xhr.timeout), esta
+      // prueba lo delataria: la subida sigue viva porque nunca deja de avanzar por más de 60s
+      // seguidos.
+      const intervalo = 50_000;
+      for (let i = 1; i <= 5; i++) {
+        await vi.advanceTimersByTimeAsync(intervalo);
+        xhr.disparaProgreso(i * 40, 200);
+      }
+      xhr.disparaCarga(200);
+
+      await expect(promesa).resolves.toBeUndefined();
+      expect(xhr.abortLlamado).toBe(false);
+    });
   });
 });

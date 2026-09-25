@@ -150,6 +150,16 @@ export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void
 }
 
 /**
+ * Tiempo sin un solo evento de progreso a partir del cual se considera que la transferencia
+ * se estancó (socket abierto pero sin datos fluyendo). Es un tope de INACTIVIDAD, no de
+ * duración total: se reinicia con cada evento de progreso, así que una subida grande y lenta
+ * pero viva nunca lo dispara. Un `xhr.timeout` fijo mataría esas subidas legítimas (un video
+ * de 200 MB a 1 Mbps tarda ~27 min), que es justo el caso que esta función existe para
+ * soportar — por eso no se usa acá.
+ */
+const UMBRAL_ESTANCAMIENTO_MS = 60_000;
+
+/**
  * Sube un archivo a una URL firmada con XMLHttpRequest, que es la única forma de obtener
  * progreso real: el upload() del SDK usa fetch, que no emite eventos de progreso.
  */
@@ -163,20 +173,53 @@ export function subirConProgreso(opciones: {
     xhr.open('PUT', opciones.signedUrl);
     xhr.setRequestHeader('content-type', opciones.file.type);
 
+    // Vigilante de estancamiento: si pasa UMBRAL_ESTANCAMIENTO_MS sin un solo evento de
+    // progreso, abortamos nosotros mismos en vez de dejar la promesa colgada para siempre.
+    let estancada = false;
+    let temporizadorDeEstancamiento: ReturnType<typeof setTimeout>;
+
+    function limpiarVigilante() {
+      clearTimeout(temporizadorDeEstancamiento);
+    }
+
+    function reiniciarVigilante() {
+      clearTimeout(temporizadorDeEstancamiento);
+      temporizadorDeEstancamiento = setTimeout(() => {
+        estancada = true;
+        xhr.abort();
+      }, UMBRAL_ESTANCAMIENTO_MS);
+    }
+
+    reiniciarVigilante();
+
     xhr.upload.addEventListener('progress', (evento) => {
+      reiniciarVigilante();
       if (evento.lengthComputable) {
         opciones.onProgress(Math.round((evento.loaded / evento.total) * 100));
       }
     });
 
     xhr.addEventListener('load', () => {
+      limpiarVigilante();
       if (xhr.status >= 200 && xhr.status < 300) resolve();
       else reject(new Error(`La subida falló (HTTP ${xhr.status}). Vuelve a intentarlo.`));
     });
-    xhr.addEventListener('error', () =>
-      reject(new Error('Se cortó la conexión durante la subida. Vuelve a intentarlo.'))
-    );
-    xhr.addEventListener('abort', () => reject(new Error('Subida cancelada.')));
+    xhr.addEventListener('error', () => {
+      limpiarVigilante();
+      reject(new Error('Se cortó la conexión durante la subida. Vuelve a intentarlo.'));
+    });
+    xhr.addEventListener('abort', () => {
+      limpiarVigilante();
+      if (estancada) {
+        reject(
+          new Error(
+            'La subida se estancó: no hubo avance durante más de un minuto. Revisa tu conexión y vuelve a intentarlo.'
+          )
+        );
+      } else {
+        reject(new Error('Subida cancelada.'));
+      }
+    });
 
     xhr.send(opciones.file);
   });
