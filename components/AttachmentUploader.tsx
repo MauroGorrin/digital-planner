@@ -18,12 +18,14 @@ function FilaAdjunto({
   canManage,
   onEliminar,
   onSubirVersion,
+  subiendoVersion,
 }: {
   adjunto: Attachment;
   url: string | undefined;
   canManage: boolean;
   onEliminar: (id: string) => void;
   onSubirVersion?: (files: FileList | null, replacesId: string) => void;
+  subiendoVersion?: boolean;
 }) {
   const inputVersionRef = useRef<HTMLInputElement>(null);
 
@@ -61,11 +63,13 @@ function FilaAdjunto({
               type="file"
               className="hidden"
               onChange={(e) => onSubirVersion(e.target.files, adjunto.id)}
+              disabled={subiendoVersion}
             />
             <button
               type="button"
               onClick={() => inputVersionRef.current?.click()}
               aria-label={`Subir nueva versión de ${adjunto.file_name}`}
+              disabled={subiendoVersion}
               className="text-xs text-brand-700 hover:underline"
             >
               Subir nueva versión
@@ -189,6 +193,7 @@ export function AttachmentUploader({
                     canManage={canManage}
                     onEliminar={eliminar}
                     onSubirVersion={canManage ? handleUpload : undefined}
+                    subiendoVersion={progreso !== null}
                   />
 
                   {entrada.reemplazados.length > 0 && (
