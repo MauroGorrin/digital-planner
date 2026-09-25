@@ -17,12 +17,16 @@ function FilaAdjunto({
   url,
   canManage,
   onEliminar,
+  onSubirVersion,
 }: {
   adjunto: Attachment;
   url: string | undefined;
   canManage: boolean;
   onEliminar: (id: string) => void;
+  onSubirVersion?: (files: FileList | null, replacesId: string) => void;
 }) {
+  const inputVersionRef = useRef<HTMLInputElement>(null);
+
   return (
     <div className="flex items-start justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
       <div className="min-w-0 flex-1">
@@ -49,14 +53,35 @@ function FilaAdjunto({
         )}
       </div>
 
-      {canManage && (
-        <button
-          onClick={() => onEliminar(adjunto.id)}
-          className="text-xs text-red-500 hover:underline"
-        >
-          Eliminar
-        </button>
-      )}
+      <div className="flex shrink-0 items-center gap-2">
+        {onSubirVersion && (
+          <>
+            <input
+              ref={inputVersionRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => onSubirVersion(e.target.files, adjunto.id)}
+            />
+            <button
+              type="button"
+              onClick={() => inputVersionRef.current?.click()}
+              aria-label={`Subir nueva versión de ${adjunto.file_name}`}
+              className="text-xs text-brand-700 hover:underline"
+            >
+              Subir nueva versión
+            </button>
+          </>
+        )}
+
+        {canManage && (
+          <button
+            onClick={() => onEliminar(adjunto.id)}
+            className="text-xs text-red-500 hover:underline"
+          >
+            Eliminar
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -163,6 +188,7 @@ export function AttachmentUploader({
                     url={urls[entrada.vigente.id]}
                     canManage={canManage}
                     onEliminar={eliminar}
+                    onSubirVersion={canManage ? handleUpload : undefined}
                   />
 
                   {entrada.reemplazados.length > 0 && (
