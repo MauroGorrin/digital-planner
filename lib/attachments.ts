@@ -83,3 +83,56 @@ export function agruparPorRonda(attachments: Attachment[]): RondaDeRevision[] {
     .map(([ronda, adjuntos]) => ({ ronda, adjuntos }))
     .sort((a, b) => b.ronda - a.ronda);
 }
+
+/**
+ * La parte del cliente de Supabase que esta función usa. Se declara acá, en vez de depender
+ * del tipo completo del SDK, para poder pasarle un doble en las pruebas.
+ */
+export interface ClienteAdjuntos {
+  from(tabla: string): {
+    // PromiseLike, no Promise: el builder de postgrest-js implementa PromiseLike y no tiene
+    // catch ni finally, asi que declarar Promise aca haria que el cliente real de Supabase
+    // no sea asignable a este tipo y el typecheck falle. Verificado contra postgrest-js
+    // instalado. PromiseLike acepta tanto el builder real como el doble de las pruebas.
+    insert(fila: Record<string, unknown>): PromiseLike<{ error: { message: string } | null }>;
+  };
+  storage: {
+    from(bucket: string): {
+      remove(rutas: string[]): PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+}
+
+export interface OpcionesRegistro {
+  supabase: ClienteAdjuntos;
+  contentPieceId: string;
+  filePath: string;
+  fileName: string;
+  fileType: string;
+  fileSize: number;
+  uploadedBy: string | null;
+  replacesId?: string | null;
+}
+
+/**
+ * Registra en la base un archivo ya subido al bucket. Si el insert falla, borra el objeto
+ * para no dejar un huérfano en storage. Nunca envía review_round: lo asigna el trigger.
+ */
+export async function registrarAdjunto(opciones: OpcionesRegistro): Promise<void> {
+  const { supabase, filePath } = opciones;
+
+  const { error } = await supabase.from('attachments').insert({
+    content_piece_id: opciones.contentPieceId,
+    file_path: filePath,
+    file_name: opciones.fileName,
+    file_type: opciones.fileType,
+    file_size: opciones.fileSize,
+    uploaded_by: opciones.uploadedBy,
+    replaces_id: opciones.replacesId ?? null,
+  });
+
+  if (error) {
+    await supabase.storage.from('attachments').remove([filePath]);
+    throw new Error(`No se pudo registrar el archivo: ${error.message}`);
+  }
+}

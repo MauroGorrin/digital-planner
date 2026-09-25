@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   TAMANO_MAXIMO_BYTES,
   agruparPorRonda,
   formatearBytes,
+  registrarAdjunto,
   validarArchivo,
 } from '@/lib/attachments';
 import type { Attachment } from '@/types/database';
@@ -97,5 +98,70 @@ describe('agruparPorRonda', () => {
 
   it('devuelve una lista vacia si no hay adjuntos', () => {
     expect(agruparPorRonda([])).toEqual([]);
+  });
+
+  it('no se cuelga si replaces_id apunta a un adjunto ausente del arreglo', () => {
+    const rondas = agruparPorRonda([adjunto({ id: 'huerfano', replaces_id: 'no-esta-en-la-pieza' })]);
+
+    expect(rondas).toHaveLength(1);
+    expect(rondas[0].adjuntos.map((a) => a.vigente.id)).toEqual(['huerfano']);
+    expect(rondas[0].adjuntos[0].reemplazados).toEqual([]);
+  });
+});
+
+describe('registrarAdjunto', () => {
+  function clienteFalso(errorDeInsert: { message: string } | null) {
+    const insert = vi.fn().mockResolvedValue({ error: errorDeInsert });
+    const remove = vi.fn().mockResolvedValue({ error: null });
+    return {
+      cliente: {
+        from: () => ({ insert }),
+        storage: { from: () => ({ remove }) },
+      },
+      insert,
+      remove,
+    };
+  }
+
+  const base = {
+    contentPieceId: 'pieza-1',
+    filePath: 'cliente-1/pieza-1/reel.mp4',
+    fileName: 'reel.mp4',
+    fileType: 'video/mp4',
+    fileSize: 2048,
+    uploadedBy: 'usuario-1',
+  };
+
+  it('inserta la fila sin mandar review_round', async () => {
+    const { cliente, insert, remove } = clienteFalso(null);
+
+    await registrarAdjunto({ supabase: cliente, ...base });
+
+    expect(insert).toHaveBeenCalledTimes(1);
+    const fila = insert.mock.calls[0][0];
+    expect(fila).toMatchObject({
+      content_piece_id: 'pieza-1',
+      file_path: 'cliente-1/pieza-1/reel.mp4',
+      replaces_id: null,
+    });
+    expect(fila).not.toHaveProperty('review_round');
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it('propaga replaces_id cuando es una nueva version', async () => {
+    const { cliente, insert } = clienteFalso(null);
+
+    await registrarAdjunto({ supabase: cliente, ...base, replacesId: 'adjunto-viejo' });
+
+    expect(insert.mock.calls[0][0].replaces_id).toBe('adjunto-viejo');
+  });
+
+  it('borra el objeto subido si falla el insert y avisa del error', async () => {
+    const { cliente, remove } = clienteFalso({ message: 'violacion de RLS' });
+
+    await expect(registrarAdjunto({ supabase: cliente, ...base })).rejects.toThrow(
+      /violacion de RLS/
+    );
+    expect(remove).toHaveBeenCalledWith(['cliente-1/pieza-1/reel.mp4']);
   });
 });
