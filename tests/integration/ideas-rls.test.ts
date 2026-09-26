@@ -130,4 +130,32 @@ describe('visibilidad de ideas', () => {
 
     expect(error).not.toBeNull();
   });
+
+  it(
+    'un contacto del cliente ve el historial de una idea visible pero no la ronda de correccion interna que tuvo antes',
+    async () => {
+      const idea = await crearIdea('Con historia mixta', 'pendiente_cliente');
+
+      // Misma idea, tres filas de historial: la ronda interna (con su nota, que nunca debe llegar
+      // al cliente), el resubmit que la devuelve a 'propuesta', y la que de verdad la hizo visible.
+      const { error } = await admin.from('idea_status_history').insert([
+        { idea_id: idea, from_status: 'propuesta', to_status: 'correccion_interna', note: 'Nota interna: reformula el gancho' },
+        { idea_id: idea, from_status: 'correccion_interna', to_status: 'propuesta' },
+        { idea_id: idea, from_status: 'propuesta', to_status: 'pendiente_cliente' },
+      ]);
+      if (error) throw error;
+
+      const cliente = await sesionDe(correos.cliente);
+      const { data } = await cliente
+        .from('idea_status_history')
+        .select('to_status, note')
+        .eq('idea_id', idea);
+
+      const vistos = (data ?? []).map((h) => h.to_status);
+      expect(vistos).toContain('pendiente_cliente');
+      expect(vistos).not.toContain('correccion_interna');
+      expect(vistos).not.toContain('propuesta');
+      expect((data ?? []).some((h) => h.note?.includes('Nota interna'))).toBe(false);
+    }
+  );
 });

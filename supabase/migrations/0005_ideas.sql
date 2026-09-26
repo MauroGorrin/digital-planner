@@ -89,11 +89,30 @@ create policy ideas_agency_update on ideas for update using (is_agency()) with c
 drop policy if exists ideas_agency_delete on ideas;
 create policy ideas_agency_delete on ideas for delete using (is_agency());
 
--- El historial se lee si se puede leer la idea; se escribe solo desde las funciones de transicion,
--- que son security definer y por lo tanto no pasan por estas politicas.
+-- El historial se filtra por transicion, no por idea: "puedo ver esta idea" no es la misma
+-- pregunta que "esta fila era para mi". Una idea que paso por correccion_interna y luego llego al
+-- cliente sigue teniendo esa fila en la tabla -- si el filtro solo mirara la idea, la nota interna
+-- de esa ronda se volveria legible para el cliente en cuanto la idea avanzara. Se escribe solo
+-- desde las funciones de transicion, que son security definer y por lo tanto no pasan por esta
+-- politica.
+--
+-- has_client_access() NO sirve aca por el mismo motivo que en ideas_select: devuelve verdadero
+-- para cualquier usuario de agencia sin mirar la marca, asi que no distingue agencia de contacto.
 drop policy if exists idea_history_select on idea_status_history;
 create policy idea_history_select on idea_status_history for select using (
-  exists (select 1 from ideas where id = idea_status_history.idea_id)
+  is_agency()
+  or (
+    exists (
+      select 1 from ideas
+      where ideas.id = idea_status_history.idea_id
+        and exists (
+          select 1 from client_contacts
+          where client_contacts.client_id = ideas.client_id
+            and client_contacts.profile_id = auth.uid()
+        )
+    )
+    and to_status in ('pendiente_cliente', 'correccion_cliente', 'aprobada', 'convertida')
+  )
 );
 
 -- Las transiciones viven aca, no en la interfaz: una llamada directa a la API tiene que fallar
