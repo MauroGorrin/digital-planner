@@ -177,5 +177,11 @@ describe('anclas de comentarios', () => {
     });
 
     expect(error).not.toBeNull();
+    // A diferencia de sus vecinas, este rechazo no viene de un `raise exception` del trigger
+    // (que pondria su texto en `message`) sino de la violacion de un check constraint de
+    // Postgres — pero Postgres tambien pone ese texto en `message`, no en `details` ni en
+    // `hint`. Se afirma contra el nombre de la restriccion para no aceptar un rechazo por
+    // cualquier otro motivo.
+    expect(error?.message).toMatch(/comments_video_segundo_check/);
   });
 });

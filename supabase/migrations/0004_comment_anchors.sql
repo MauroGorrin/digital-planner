@@ -7,8 +7,21 @@ alter table comments
 
 -- La Server Action addComment es un endpoint publico y hoy acepta el ancla tal cual llega; la
 -- cota vive donde vive el resto del modelo, no solo en la interfaz.
-alter table comments
-  add constraint comments_video_segundo_check check (video_segundo is null or video_segundo >= 0);
+--
+-- 0003 no deja un precedente idempotente para "add constraint" (su unique tampoco esta guardado),
+-- asi que esto usa un bloque do $$ que revisa pg_constraint antes de crear la restriccion --
+-- necesario porque este archivo se aplica a mano, pegado en el editor SQL del panel de Supabase, y
+-- reaplicarlo sobre una base que ya lo tiene no debe fallar con "constraint already exists".
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'comments_video_segundo_check'
+  ) then
+    alter table comments
+      add constraint comments_video_segundo_check check (video_segundo is null or video_segundo >= 0);
+  end if;
+end;
+$$;
 
 create index if not exists idx_comments_attachment on comments (attachment_id);
 
