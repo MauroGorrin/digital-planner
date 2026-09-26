@@ -104,6 +104,7 @@ describe('transiciones de ideas', () => {
     const { error } = await cliente.rpc('submit_idea_to_client', { p_idea_id: idea });
 
     expect(error).not.toBeNull();
+    expect(error!.message).toMatch(/administrador de agencia/i);
   });
 
   it('pedir correccion sin nota es rechazado', async () => {
@@ -159,6 +160,7 @@ describe('transiciones de ideas', () => {
 
     const sinMotivo = await agencia.rpc('discard_idea', { p_idea_id: idea, p_reason: '' });
     expect(sinMotivo.error).not.toBeNull();
+    expect(sinMotivo.error!.message).toMatch(/motivo/i);
 
     const conMotivo = await agencia.rpc('discard_idea', {
       p_idea_id: idea,
@@ -168,6 +170,14 @@ describe('transiciones de ideas', () => {
 
     const { data } = await admin.from('ideas').select('status').eq('id', idea).single();
     expect(data!.status).toBe('descartada');
+
+    const { data: historial } = await admin
+      .from('idea_status_history')
+      .select('to_status, note')
+      .eq('idea_id', idea)
+      .eq('to_status', 'descartada')
+      .single();
+    expect(historial!.note).toBe('Ya se hizo algo igual en julio');
   });
 
   it('enviar al cliente notifica a cada contacto de la marca', async () => {
