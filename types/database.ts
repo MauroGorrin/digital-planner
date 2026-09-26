@@ -203,4 +203,5 @@ export interface IdeaStatusHistoryEntry {
   changed_by: string | null;
   note: string | null;
   created_at: string;
+  changed_by_profile?: Pick<Profile, 'full_name'> | null;
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { accionesDisponibles, ideaSirveComoOrigenDePieza } from '@/lib/ideas';
+import { accionesDisponibles, agruparHistorialPorIdea, ideaSirveComoOrigenDePieza } from '@/lib/ideas';
+import type { IdeaStatusHistoryEntry } from '@/types/database';
 
 describe('accionesDisponibles', () => {
   it('un admin de agencia filtra una propuesta', () => {
@@ -59,5 +60,50 @@ describe('ideaSirveComoOrigenDePieza', () => {
 
   it('una idea ya convertida no sirve de origen otra vez', () => {
     expect(ideaSirveComoOrigenDePieza({ status: 'convertida' })).toBe(false);
+  });
+});
+
+function entrada(overrides: Partial<IdeaStatusHistoryEntry>): IdeaStatusHistoryEntry {
+  return {
+    id: 'h1',
+    idea_id: 'idea-1',
+    from_status: null,
+    to_status: 'propuesta',
+    changed_by: null,
+    note: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+describe('agruparHistorialPorIdea', () => {
+  it('reparte una consulta de varias ideas en un mapa por idea', () => {
+    const historial = [
+      entrada({ id: 'a1', idea_id: 'idea-a', created_at: '2026-01-01T00:00:00.000Z' }),
+      entrada({ id: 'b1', idea_id: 'idea-b', created_at: '2026-01-02T00:00:00.000Z' }),
+      entrada({ id: 'a2', idea_id: 'idea-a', created_at: '2026-01-03T00:00:00.000Z' }),
+    ];
+
+    const agrupado = agruparHistorialPorIdea(historial);
+
+    expect(Object.keys(agrupado).sort()).toEqual(['idea-a', 'idea-b']);
+    expect(agrupado['idea-a']).toHaveLength(2);
+    expect(agrupado['idea-b']).toHaveLength(1);
+  });
+
+  it('ordena cada grupo con la mas reciente primero, sin depender del orden de entrada', () => {
+    const historial = [
+      entrada({ id: 'vieja', idea_id: 'idea-a', created_at: '2026-01-01T00:00:00.000Z' }),
+      entrada({ id: 'nueva', idea_id: 'idea-a', created_at: '2026-01-05T00:00:00.000Z' }),
+      entrada({ id: 'media', idea_id: 'idea-a', created_at: '2026-01-03T00:00:00.000Z' }),
+    ];
+
+    const agrupado = agruparHistorialPorIdea(historial);
+
+    expect(agrupado['idea-a'].map((h) => h.id)).toEqual(['nueva', 'media', 'vieja']);
+  });
+
+  it('una idea sin transiciones no aparece en el mapa', () => {
+    expect(agruparHistorialPorIdea([])).toEqual({});
   });
 });

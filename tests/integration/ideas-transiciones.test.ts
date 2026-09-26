@@ -197,6 +197,26 @@ describe('transiciones de ideas', () => {
     expect(data![0].content_piece_id).toBeNull();
   });
 
+  it('pedir correccion interna notifica al autor de la idea', async () => {
+    const idea = await crearIdea('Para corregir', 'propuesta');
+    const agencia = await sesionDe(correos.agencia);
+
+    const { error } = await agencia.rpc('request_idea_internal_changes', {
+      p_idea_id: idea,
+      p_note: 'Falta el gancho inicial',
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from('notifications')
+      .select('profile_id, idea_id, content_piece_id')
+      .eq('idea_id', idea);
+
+    expect(data).toHaveLength(1);
+    expect(data![0].profile_id).toBe(ids.agencia);
+    expect(data![0].content_piece_id).toBeNull();
+  });
+
   it('un contacto del cliente no puede leer el historial de una idea que no puede ver', async () => {
     const idea = await crearIdea('Oculta para el cliente', 'propuesta');
     const agencia = await sesionDe(correos.agencia);

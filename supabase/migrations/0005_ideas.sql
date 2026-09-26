@@ -104,32 +104,39 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_client uuid;
 begin
   select status, client_id into v_old, v_client from ideas where id = p_idea_id;
-  if v_client is null then raise exception 'La idea no existe'; end if;
   if not is_agency_admin() then raise exception 'Solo un administrador de agencia puede enviarla al cliente'; end if;
+  if v_client is null then raise exception 'La idea no existe'; end if;
   if v_old <> 'propuesta' then raise exception 'Solo una idea en propuesta se puede enviar al cliente'; end if;
 
   update ideas set status = 'pendiente_cliente' where id = p_idea_id;
   insert into idea_status_history (idea_id, from_status, to_status, changed_by)
     values (p_idea_id, v_old, 'pendiente_cliente', auth.uid());
   insert into notifications (profile_id, idea_id, type, title, body)
-    select profile_id, p_idea_id, 'idea_pendiente', 'Una idea espera tu revision', null
+    select profile_id, p_idea_id, 'idea_pendiente', 'Una idea espera tu revisión', null
     from client_contacts where client_id = v_client;
 end;
 $$;
 
 create or replace function request_idea_internal_changes(p_idea_id uuid, p_note text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_old idea_status;
+declare v_old idea_status; v_created_by uuid;
 begin
-  select status into v_old from ideas where id = p_idea_id;
+  select status, created_by into v_old, v_created_by from ideas where id = p_idea_id;
+  if not is_agency_admin() then raise exception 'Solo un administrador de agencia puede pedir corrección interna'; end if;
   if v_old is null then raise exception 'La idea no existe'; end if;
-  if not is_agency_admin() then raise exception 'Solo un administrador de agencia puede pedir correccion interna'; end if;
-  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir correccion exige una nota'; end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir corrección exige una nota'; end if;
   if v_old <> 'propuesta' then raise exception 'Solo una idea en propuesta se puede devolver al autor'; end if;
 
   update ideas set status = 'correccion_interna' where id = p_idea_id;
   insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
     values (p_idea_id, v_old, 'correccion_interna', auth.uid(), p_note);
+  -- La contraparte de esta transicion es el autor de la idea (ideas.created_by), no un contacto
+  -- de cliente: es la unica funcion de este archivo donde ambos lados son de agencia. Sin esto el
+  -- autor no se entera de que le pidieron corregir y la idea puede quedar parada indefinidamente.
+  if v_created_by is not null then
+    insert into notifications (profile_id, idea_id, type, title, body)
+      values (v_created_by, p_idea_id, 'idea_correccion_interna', 'La agencia pidió corregir tu idea', p_note);
+  end if;
 end;
 $$;
 
@@ -138,17 +145,17 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_client uuid;
 begin
   select status, client_id into v_old, v_client from ideas where id = p_idea_id;
-  if v_client is null then raise exception 'La idea no existe'; end if;
   if not exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid()) then
     raise exception 'Solo el cliente puede aprobar una idea';
   end if;
+  if v_client is null then raise exception 'La idea no existe'; end if;
   if v_old <> 'pendiente_cliente' then raise exception 'Solo una idea pendiente se puede aprobar'; end if;
 
   update ideas set status = 'aprobada' where id = p_idea_id;
   insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
     values (p_idea_id, v_old, 'aprobada', auth.uid(), p_note);
   insert into notifications (profile_id, idea_id, type, title, body)
-    select profile_id, p_idea_id, 'idea_aprobada', 'El cliente aprobo una idea', p_note
+    select profile_id, p_idea_id, 'idea_aprobada', 'El cliente aprobó una idea', p_note
     from client_assignments where client_id = v_client;
 end;
 $$;
@@ -158,18 +165,18 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_client uuid;
 begin
   select status, client_id into v_old, v_client from ideas where id = p_idea_id;
-  if v_client is null then raise exception 'La idea no existe'; end if;
   if not exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid()) then
     raise exception 'Solo el cliente puede pedir cambios en una idea';
   end if;
-  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir correccion exige una nota'; end if;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir corrección exige una nota'; end if;
   if v_old <> 'pendiente_cliente' then raise exception 'Solo una idea pendiente admite pedir cambios'; end if;
 
   update ideas set status = 'correccion_cliente' where id = p_idea_id;
   insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
     values (p_idea_id, v_old, 'correccion_cliente', auth.uid(), p_note);
   insert into notifications (profile_id, idea_id, type, title, body)
-    select profile_id, p_idea_id, 'idea_cambios', 'El cliente pidio cambios en una idea', p_note
+    select profile_id, p_idea_id, 'idea_cambios', 'El cliente pidió cambios en una idea', p_note
     from client_assignments where client_id = v_client;
 end;
 $$;
@@ -179,13 +186,13 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_client uuid;
 begin
   select status, client_id into v_old, v_client from ideas where id = p_idea_id;
-  if v_client is null then raise exception 'La idea no existe'; end if;
   if not (
     is_agency()
     or exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid())
   ) then
     raise exception 'No autorizado';
   end if;
+  if v_client is null then raise exception 'La idea no existe'; end if;
   if coalesce(trim(p_reason), '') = '' then raise exception 'Descartar exige un motivo'; end if;
   if v_old = 'convertida' then raise exception 'Una idea ya convertida en pieza no se descarta'; end if;
 
@@ -203,15 +210,15 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_new idea_status; v_client uuid;
 begin
   select status, client_id into v_old, v_client from ideas where id = p_idea_id;
-  if v_client is null then raise exception 'La idea no existe'; end if;
   if not is_agency() then raise exception 'Solo la agencia puede reenviar una idea'; end if;
+  if v_client is null then raise exception 'La idea no existe'; end if;
 
   if v_old = 'correccion_interna' then
     v_new := 'propuesta';
   elsif v_old = 'correccion_cliente' then
     v_new := 'pendiente_cliente';
   else
-    raise exception 'Solo una idea en correccion se puede reenviar';
+    raise exception 'Solo una idea en corrección se puede reenviar';
   end if;
 
   update ideas set status = v_new where id = p_idea_id;
@@ -220,7 +227,7 @@ begin
 
   if v_new = 'pendiente_cliente' then
     insert into notifications (profile_id, idea_id, type, title, body)
-      select profile_id, p_idea_id, 'idea_pendiente', 'Una idea corregida espera tu revision', null
+      select profile_id, p_idea_id, 'idea_pendiente', 'Una idea corregida espera tu revisión', null
       from client_contacts where client_id = v_client;
   end if;
 end;
@@ -233,8 +240,8 @@ returns void language plpgsql security definer set search_path = public as $$
 declare v_old idea_status; v_client_idea uuid; v_client_pieza uuid;
 begin
   select status, client_id into v_old, v_client_idea from ideas where id = p_idea_id;
-  if v_client_idea is null then raise exception 'La idea no existe'; end if;
   if not is_agency() then raise exception 'Solo la agencia puede convertir una idea'; end if;
+  if v_client_idea is null then raise exception 'La idea no existe'; end if;
   if v_old <> 'aprobada' then raise exception 'Solo una idea aprobada se puede convertir'; end if;
 
   select client_id into v_client_pieza from content_pieces where id = p_content_piece_id;

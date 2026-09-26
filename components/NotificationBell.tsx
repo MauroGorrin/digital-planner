@@ -9,6 +9,7 @@ interface NotificationRow {
   title: string;
   body: string | null;
   content_piece_id: string | null;
+  idea_id: string | null;
   read_at: string | null;
   created_at: string;
 }
@@ -21,7 +22,7 @@ export function NotificationBell({ profileId }: { profileId: string }) {
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('notifications')
-      .select('id,title,body,content_piece_id,read_at,created_at')
+      .select('id,title,body,content_piece_id,idea_id,read_at,created_at')
       .eq('profile_id', profileId)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -82,7 +83,7 @@ export function NotificationBell({ profileId }: { profileId: string }) {
             {items.map((n) => (
               <Link
                 key={n.id}
-                href={n.content_piece_id ? `/piezas/${n.content_piece_id}` : '#'}
+                href={n.content_piece_id ? `/piezas/${n.content_piece_id}` : n.idea_id ? '/ideas' : '#'}
                 onClick={() => setOpen(false)}
                 className={`block rounded-lg px-3 py-2 text-sm hover:bg-slate-50 ${!n.read_at ? 'bg-brand-50/60' : ''}`}
               >

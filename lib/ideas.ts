@@ -1,4 +1,4 @@
-import type { Idea, IdeaStatus, UserRole } from '@/types/database';
+import type { Idea, IdeaStatus, IdeaStatusHistoryEntry, UserRole } from '@/types/database';
 
 export type AccionDeIdea =
   | 'enviar_al_cliente'
@@ -54,4 +54,24 @@ export function accionesDisponibles(
  */
 export function ideaSirveComoOrigenDePieza(idea: Pick<Idea, 'status'>): boolean {
   return idea.status === 'aprobada';
+}
+
+/**
+ * Agrupa filas de idea_status_history por idea, mas reciente primero dentro de cada grupo.
+ *
+ * Existe para que `app/ideas/page.tsx` pueda traer el historial de todas las ideas visibles en
+ * una sola consulta (`.in('idea_id', ids)`) y repartirlo en memoria, en vez de una consulta por
+ * tarjeta -- que es invisible con cuatro ideas y arruina la pagina con doscientas.
+ */
+export function agruparHistorialPorIdea(
+  historial: IdeaStatusHistoryEntry[]
+): Record<string, IdeaStatusHistoryEntry[]> {
+  const porIdea: Record<string, IdeaStatusHistoryEntry[]> = {};
+  for (const entrada of historial) {
+    (porIdea[entrada.idea_id] ??= []).push(entrada);
+  }
+  for (const lista of Object.values(porIdea)) {
+    lista.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+  }
+  return porIdea;
 }

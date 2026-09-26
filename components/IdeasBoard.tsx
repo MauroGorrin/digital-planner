@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Client, Idea, IdeaStatus, Profile } from '@/types/database';
+import type { Client, Idea, IdeaStatus, IdeaStatusHistoryEntry, Profile } from '@/types/database';
 import { FORMAT_LABELS, IDEA_STATUS_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { accionesDisponibles, type AccionDeIdea } from '@/lib/ideas';
 import {
@@ -54,11 +54,13 @@ export function IdeasBoard({
   ideas,
   clients,
   marcasDondeEsContacto,
+  historialPorIdea,
 }: {
   profile: Profile;
   ideas: Idea[];
   clients: Client[];
   marcasDondeEsContacto: string[];
+  historialPorIdea: Record<string, IdeaStatusHistoryEntry[]>;
 }) {
   const router = useRouter();
   const esAgencia = profile.role !== 'client';
@@ -149,6 +151,7 @@ export function IdeasBoard({
               const nota = notas[idea.id] ?? '';
               const error = errores[idea.id];
               const enCurso = pendingId === idea.id;
+              const historial = historialPorIdea[idea.id] ?? [];
 
               return (
                 <div key={idea.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
@@ -168,6 +171,29 @@ export function IdeasBoard({
                     <a href={idea.reference_link} target="_blank" rel="noreferrer" className="text-xs text-brand-600 underline">
                       Ver referencia
                     </a>
+                  )}
+
+                  {historial.length > 0 && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs font-medium text-slate-500">
+                        Historial ({historial.length})
+                      </summary>
+                      <ul className="mt-1.5 space-y-1.5">
+                        {historial.map((h) => (
+                          <li key={h.id} className="border-l-2 border-slate-200 pl-2 text-xs">
+                            <p className="font-medium text-slate-700">
+                              {h.from_status ? `${IDEA_STATUS_LABELS[h.from_status]} → ` : ''}
+                              {IDEA_STATUS_LABELS[h.to_status]}
+                            </p>
+                            {h.note && <p className="text-slate-500">{h.note}</p>}
+                            <p className="text-[11px] text-slate-400">
+                              {h.changed_by_profile?.full_name ?? 'Sistema'} ·{' '}
+                              {new Date(h.created_at).toLocaleString('es-MX')}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
                   )}
 
                   {error && <p className="rounded-lg bg-red-50 px-2 py-1.5 text-xs text-red-700">{error}</p>}
