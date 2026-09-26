@@ -2,10 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!URL || !ANON || !SERVICE) {
+if (!URL || !SERVICE) {
   throw new Error(
     'Faltan credenciales de Supabase local. Corre `npm run test:integration`, que ejecuta ' +
       'scripts/write-supabase-test-env.mjs antes de Vitest.'
@@ -153,5 +152,30 @@ describe('anclas de comentarios', () => {
     expect(despues!.body).toBe('Sobrevive al borrado');
     expect(despues!.attachment_id).toBeNull();
     expect(despues!.video_segundo).toBe(30);
+  });
+
+  it('rechaza un INSERT con video_segundo sin attachment_id', async () => {
+    const { error } = await admin.from('comments').insert({
+      content_piece_id: ids.piezaA,
+      author_id: ids.agencia,
+      body: 'Ancla incompleta desde el principio',
+      attachment_id: null,
+      video_segundo: 7,
+    });
+
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/no puede tener video_segundo sin attachment_id/);
+  });
+
+  it('rechaza un video_segundo negativo', async () => {
+    const { error } = await admin.from('comments').insert({
+      content_piece_id: ids.piezaA,
+      author_id: ids.agencia,
+      body: 'Segundo invalido',
+      attachment_id: ids.adjuntoA,
+      video_segundo: -1,
+    });
+
+    expect(error).not.toBeNull();
   });
 });

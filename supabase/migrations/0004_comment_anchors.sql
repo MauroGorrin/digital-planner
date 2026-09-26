@@ -5,6 +5,11 @@ alter table comments
   add column if not exists attachment_id uuid references attachments (id) on delete set null,
   add column if not exists video_segundo int;
 
+-- La Server Action addComment es un endpoint publico y hoy acepta el ancla tal cual llega; la
+-- cota vive donde vive el resto del modelo, no solo en la interfaz.
+alter table comments
+  add constraint comments_video_segundo_check check (video_segundo is null or video_segundo >= 0);
+
 create index if not exists idx_comments_attachment on comments (attachment_id);
 
 -- on delete set null, no cascade: si borrar un archivo se llevara sus comentarios, se perderia
@@ -27,6 +32,16 @@ begin
       raise exception 'El adjunto % no pertenece a la pieza %', new.attachment_id, new.content_piece_id;
     end if;
   end if;
+
+  -- Solo en INSERT: el on delete set null de arriba crea a propósito un comentario con
+  -- video_segundo y sin attachment_id cuando el archivo se borra, y ese estado llega por UPDATE
+  -- y debe seguir permitido. Lo que no debe poder pasar es crear ese mismo estado desde el
+  -- principio, porque entonces la interfaz diria que un archivo fue eliminado cuando nunca
+  -- existio.
+  if tg_op = 'INSERT' and new.video_segundo is not null and new.attachment_id is null then
+    raise exception 'Un comentario no puede tener video_segundo sin attachment_id';
+  end if;
+
   return new;
 end;
 $$;

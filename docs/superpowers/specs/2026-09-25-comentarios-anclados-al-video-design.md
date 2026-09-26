@@ -29,6 +29,7 @@ el hilo; y saltar el reproductor a ese momento al pulsarla.
 | Anclar en imágenes o PDF (dibujar sobre el archivo) | Es otro modelo de anclaje — coordenadas, no tiempo — y otro diseño. |
 | Responder a un comentario anclado | `comments.parent_comment_id` ya existe, pero conectar hilos es trabajo aparte y no se pidió. |
 | Que el comentario anclado dispare un cambio de estado | Pedir cambios sigue siendo su propio botón, con su nota. Un comentario es conversación, no una transición. |
+| Que el ancla viaje al webhook de Make o a la notificación in-app | `addComment` les sigue mandando solo el texto del comentario. Quien se entera de un comentario anclado por esos canales recibe "el logo se ve mal" sin el segundo — el mismo problema que este diseño resuelve, pero por otro canal. Se deja fuera a propósito, no por descuido. |
 
 ## Lo que ya existe y este diseño usa
 
