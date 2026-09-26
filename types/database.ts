@@ -158,3 +158,49 @@ export interface WebhookConfig {
   events: string[];
   created_at: string;
 }
+
+export type IdeaStatus =
+  | 'propuesta'
+  | 'correccion_interna'
+  | 'pendiente_cliente'
+  | 'correccion_cliente'
+  | 'aprobada'
+  | 'descartada'
+  | 'convertida';
+
+export const IDEA_STATUS_LABELS: Record<IdeaStatus, string> = {
+  propuesta: 'Propuesta',
+  correccion_interna: 'Corrección interna',
+  pendiente_cliente: 'Pendiente del cliente',
+  correccion_cliente: 'Corrección del cliente',
+  aprobada: 'Aprobada',
+  descartada: 'Descartada',
+  convertida: 'Convertida en pieza',
+};
+
+export interface Idea {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string;
+  reference_link: string | null;
+  suggested_platform: PlatformType | null;
+  suggested_format: ContentFormat | null;
+  status: IdeaStatus;
+  created_by: string | null;
+  content_piece_id: string | null;
+  created_at: string;
+  updated_at: string;
+  clients?: Pick<Client, 'id' | 'name' | 'brand_name'> | null;
+  author?: Pick<Profile, 'id' | 'full_name'> | null;
+}
+
+export interface IdeaStatusHistoryEntry {
+  id: string;
+  idea_id: string;
+  from_status: IdeaStatus | null;
+  to_status: IdeaStatus;
+  changed_by: string | null;
+  note: string | null;
+  created_at: string;
+}
