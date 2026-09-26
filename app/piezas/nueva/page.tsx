@@ -2,15 +2,24 @@ import { requireAgency } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { ContentPieceForm } from '@/components/ContentPieceForm';
-import type { Client, Profile } from '@/types/database';
+import type { Client, Idea, Profile } from '@/types/database';
 
-export default async function NuevaPiezaPage({ searchParams }: { searchParams: { client?: string } }) {
+export default async function NuevaPiezaPage({
+  searchParams,
+}: {
+  searchParams: { client?: string; idea?: string };
+}) {
   const profile = await requireAgency();
   const supabase = createClient();
-  const [{ data: clients }, { data: team }] = await Promise.all([
+  const [{ data: clients }, { data: team }, { data: idea }] = await Promise.all([
     supabase.from('clients').select('*').eq('archived', false).order('name'),
     supabase.from('profiles').select('*').in('role', ['agency_admin', 'agency_member']).order('full_name'),
+    searchParams.idea
+      ? supabase.from('ideas').select('*').eq('id', searchParams.idea).single()
+      : Promise.resolve({ data: null }),
   ]);
+
+  const ideaOrigen = idea as Idea | null;
 
   return (
     <AppShell profile={profile}>
@@ -19,7 +28,19 @@ export default async function NuevaPiezaPage({ searchParams }: { searchParams: {
         <ContentPieceForm
           clients={(clients ?? []) as Client[]}
           team={(team ?? []) as Profile[]}
-          defaultClientId={searchParams.client}
+          defaultClientId={ideaOrigen?.client_id ?? searchParams.client}
+          ideaOrigen={
+            ideaOrigen
+              ? {
+                  id: ideaOrigen.id,
+                  client_id: ideaOrigen.client_id,
+                  title: ideaOrigen.title,
+                  description: ideaOrigen.description,
+                  suggested_platform: ideaOrigen.suggested_platform,
+                  suggested_format: ideaOrigen.suggested_format,
+                }
+              : undefined
+          }
         />
       </div>
     </AppShell>

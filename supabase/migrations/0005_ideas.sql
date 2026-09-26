@@ -225,3 +225,28 @@ begin
   end if;
 end;
 $$;
+
+-- La pieza se crea por el camino normal y despues se vincula. Asi la creacion sigue teniendo un
+-- solo lugar donde vive su validacion, y esta funcion solo se ocupa del vinculo y del estado.
+create or replace function convert_idea_to_piece(p_idea_id uuid, p_content_piece_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_client_idea uuid; v_client_pieza uuid;
+begin
+  select status, client_id into v_old, v_client_idea from ideas where id = p_idea_id;
+  if v_client_idea is null then raise exception 'La idea no existe'; end if;
+  if not is_agency() then raise exception 'Solo la agencia puede convertir una idea'; end if;
+  if v_old <> 'aprobada' then raise exception 'Solo una idea aprobada se puede convertir'; end if;
+
+  select client_id into v_client_pieza from content_pieces where id = p_content_piece_id;
+  if v_client_pieza is null then raise exception 'La pieza no existe'; end if;
+  if v_client_pieza <> v_client_idea then
+    raise exception 'La pieza pertenece a otra marca que la idea';
+  end if;
+
+  update ideas
+    set status = 'convertida', content_piece_id = p_content_piece_id
+    where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by)
+    values (p_idea_id, v_old, 'convertida', auth.uid());
+end;
+$$;

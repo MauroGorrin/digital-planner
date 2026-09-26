@@ -65,3 +65,8 @@ export async function reenviarIdea(id: string) {
   await requireAgency();
   await llamar('resubmit_idea', { p_idea_id: id });
 }
+
+export async function vincularIdeaAPieza(ideaId: string, pieceId: string) {
+  await requireAgency();
+  await llamar('convert_idea_to_piece', { p_idea_id: ideaId, p_content_piece_id: pieceId });
+}

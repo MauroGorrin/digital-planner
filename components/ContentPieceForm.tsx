@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Client, ContentFormat, ContentPiece, PlatformType, Profile } from '@/types/database';
 import { FORMAT_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { createContentPiece, updateContentPiece } from '@/app/actions';
+import { vincularIdeaAPieza } from '@/app/actions-ideas';
 import { createClient } from '@/lib/supabase/client';
 import {
   TAMANO_MAXIMO_BYTES,
@@ -26,11 +27,20 @@ export function ContentPieceForm({
   team,
   defaultClientId,
   piece,
+  ideaOrigen,
 }: {
   clients: Client[];
   team: Profile[];
   defaultClientId?: string;
   piece?: ContentPiece;
+  ideaOrigen?: {
+    id: string;
+    client_id: string;
+    title: string;
+    description: string;
+    suggested_platform: PlatformType | null;
+    suggested_format: ContentFormat | null;
+  };
 }) {
   const router = useRouter();
   const supabase = createClient();
@@ -42,10 +52,10 @@ export function ContentPieceForm({
   // ofrecer "Ir a la pieza" en vez de dejar al usuario sin saber que ya fue creada.
   const [piezaCreada, setPiezaCreada] = useState<string | null>(null);
   const [clientId, setClientId] = useState(piece?.client_id ?? defaultClientId ?? clients[0]?.id ?? '');
-  const [platform, setPlatform] = useState<PlatformType>(piece?.platform ?? 'instagram');
-  const [contentFormat, setContentFormat] = useState<ContentFormat>(piece?.format ?? 'post');
-  const [title, setTitle] = useState(piece?.title ?? '');
-  const [copyText, setCopyText] = useState(piece?.copy_text ?? '');
+  const [platform, setPlatform] = useState<PlatformType>(piece?.platform ?? ideaOrigen?.suggested_platform ?? 'instagram');
+  const [contentFormat, setContentFormat] = useState<ContentFormat>(piece?.format ?? ideaOrigen?.suggested_format ?? 'post');
+  const [title, setTitle] = useState(piece?.title ?? ideaOrigen?.title ?? '');
+  const [copyText, setCopyText] = useState(piece?.copy_text ?? ideaOrigen?.description ?? '');
   const [referenceLink, setReferenceLink] = useState(piece?.reference_link ?? '');
   const [scheduledAt, setScheduledAt] = useState(toLocalInputValue(piece?.scheduled_at) || toLocalInputValue(new Date().toISOString()));
   const [assigneeId, setAssigneeId] = useState(piece?.assignee_id ?? '');
@@ -94,12 +104,19 @@ export function ContentPieceForm({
           assignee_id: assigneeId || undefined,
         });
 
-        if (archivos.length > 0) {
-          // A partir de acá la pieza ya existe y no se borra si la subida falla: volver a pedirle
-          // al usuario el título, el copy y la fecha por un corte de red sería peor que dejarle un
-          // borrador al que puede subirle el archivo desde su ficha.
-          setPiezaCreada(id);
+        // A partir de acá la pieza ya existe y no se borra si algo posterior falla: volver a
+        // pedirle al usuario el título, el copy y la fecha por un corte de red o un vínculo que
+        // falla sería peor que dejarle un borrador al que puede volver desde su ficha.
+        setPiezaCreada(id);
 
+        if (ideaOrigen) {
+          // El vínculo es una llamada barata y va antes de la subida (que puede tardar minutos y
+          // fallar por la red): si fallara después, la pieza quedaría creada con la idea todavía en
+          // "aprobada", ofreciendo convertirla otra vez y perdiendo el registro de su origen.
+          await vincularIdeaAPieza(ideaOrigen.id, id);
+        }
+
+        if (archivos.length > 0) {
           const {
             data: { user },
           } = await supabase.auth.getUser();
@@ -279,13 +296,13 @@ export function ContentPieceForm({
 
       {error && piezaCreada && (
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-          <p>La pieza sí se creó; lo que falló fue la subida del archivo.</p>
+          <p>La pieza sí se creó; lo que falló fue un paso posterior (el vínculo con la idea o la subida del archivo).</p>
           <button
             type="button"
             onClick={() => router.push(`/piezas/${piezaCreada}`)}
             className="mt-1 font-medium underline"
           >
-            Ir a la pieza para subirlo desde ahí
+            Ir a la pieza para continuar desde ahí
           </button>
         </div>
       )}

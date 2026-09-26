@@ -231,4 +231,61 @@ describe('transiciones de ideas', () => {
     expect(data).toHaveLength(1);
     expect(data![0].to_status).toBe('pendiente_cliente');
   });
+
+  it('convertir vincula la pieza y deja la idea en convertida', async () => {
+    const idea = await crearIdea('Lista para producir', 'aprobada');
+    const { data: pieza } = await admin
+      .from('content_pieces')
+      .insert({
+        client_id: ids.marca,
+        platform: 'instagram',
+        format: 'reel',
+        title: 'Pieza desde idea',
+        scheduled_at: new Date().toISOString(),
+        created_by: ids.agencia,
+      })
+      .select('id')
+      .single();
+
+    const agencia = await sesionDe(correos.agencia);
+    const { error } = await agencia.rpc('convert_idea_to_piece', {
+      p_idea_id: idea,
+      p_content_piece_id: pieza!.id,
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from('ideas')
+      .select('status, content_piece_id')
+      .eq('id', idea)
+      .single();
+
+    expect(data!.status).toBe('convertida');
+    expect(data!.content_piece_id).toBe(pieza!.id);
+  });
+
+  it('solo una idea aprobada se puede convertir', async () => {
+    const idea = await crearIdea('Todavia en propuesta', 'propuesta');
+    const { data: pieza } = await admin
+      .from('content_pieces')
+      .insert({
+        client_id: ids.marca,
+        platform: 'instagram',
+        format: 'post',
+        title: 'Pieza suelta',
+        scheduled_at: new Date().toISOString(),
+        created_by: ids.agencia,
+      })
+      .select('id')
+      .single();
+
+    const agencia = await sesionDe(correos.agencia);
+    const { error } = await agencia.rpc('convert_idea_to_piece', {
+      p_idea_id: idea,
+      p_content_piece_id: pieza!.id,
+    });
+
+    expect(error).not.toBeNull();
+    expect(error!.message).toMatch(/aprobada/i);
+  });
 });
