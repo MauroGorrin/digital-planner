@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { addComment, deleteAttachment } from '@/app/actions';
-import { agruparPorRonda, formatearBytes, registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
+import { agruparPorRonda, formatearBytes, subirArchivoAPieza, validarArchivo } from '@/lib/attachments';
 import { formatearSegundos, idDeVideo } from '@/lib/comentarios';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
 
@@ -243,30 +243,14 @@ export function AttachmentUploader({
       for (const file of seleccionados) {
         setProgreso({ nombre: file.name, porcentaje: 0 });
 
-        const path = `${piece.client_id}/${piece.id}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
-
-        const { data: firmada, error: errorFirma } = await supabase.storage
-          .from('attachments')
-          .createSignedUploadUrl(path);
-        if (errorFirma || !firmada) {
-          throw new Error(errorFirma?.message ?? 'No se pudo preparar la subida.');
-        }
-
-        await subirConProgreso({
-          signedUrl: firmada.signedUrl,
-          file,
-          onProgress: (porcentaje) => setProgreso({ nombre: file.name, porcentaje }),
-        });
-
-        await registrarAdjunto({
+        await subirArchivoAPieza({
           supabase,
+          clientId: piece.client_id,
           contentPieceId: piece.id,
-          filePath: path,
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
+          file,
           uploadedBy: user?.id ?? null,
           replacesId,
+          onProgress: (porcentaje) => setProgreso({ nombre: file.name, porcentaje }),
         });
       }
     } catch (err) {

@@ -289,3 +289,72 @@ export function subirConProgreso(opciones: {
     xhr.send(opciones.file);
   });
 }
+
+/**
+ * El cliente que necesita subirArchivoAPieza: lo de ClienteAdjuntos mas la firma de la URL de
+ * subida. Se declara aparte en vez de importar el SupabaseClient real para que lib/attachments.ts
+ * siga sin depender de lib/supabase/client.ts, que lleva 'use client'.
+ *
+ * PromiseLike y no Promise, por lo mismo que ClienteAdjuntos: ver el comentario de arriba.
+ */
+export interface ClienteSubida extends ClienteAdjuntos {
+  storage: {
+    from(bucket: string): {
+      createSignedUploadUrl(ruta: string): PromiseLike<{
+        data: { signedUrl: string } | null;
+        error: { message: string } | null;
+      }>;
+      remove(rutas: string[]): PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+}
+
+/**
+ * Sube un archivo a una pieza y lo registra: firma la URL, transfiere con progreso real, e
+ * inserta la fila (con la compensacion del huerfano que trae registrarAdjunto).
+ *
+ * Vive aca y no en el componente porque hay dos lugares que suben un archivo a una pieza -- la
+ * ficha y el formulario de creacion -- y el bloque completo (ruta, firma, transferencia,
+ * registro) tiene que ser identico en los dos. Duplicarlo es como se desincronizan.
+ *
+ * La ruta incluye Date.now() porque dos archivos con el mismo nombre en la misma pieza son
+ * legitimos: la segunda version de un reel suele llamarse igual que la primera.
+ */
+export async function subirArchivoAPieza(opciones: {
+  supabase: ClienteSubida;
+  clientId: string;
+  contentPieceId: string;
+  file: File;
+  uploadedBy: string | null;
+  replacesId?: string | null;
+  onProgress: (porcentaje: number) => void;
+}): Promise<void> {
+  const path = `${opciones.clientId}/${opciones.contentPieceId}/${Date.now()}_${opciones.file.name.replace(
+    /[^\w.\-]/g,
+    '_'
+  )}`;
+
+  const { data: firmada, error: errorFirma } = await opciones.supabase.storage
+    .from('attachments')
+    .createSignedUploadUrl(path);
+  if (errorFirma || !firmada) {
+    throw new Error(errorFirma?.message ?? 'No se pudo preparar la subida.');
+  }
+
+  await subirConProgreso({
+    signedUrl: firmada.signedUrl,
+    file: opciones.file,
+    onProgress: opciones.onProgress,
+  });
+
+  await registrarAdjunto({
+    supabase: opciones.supabase,
+    contentPieceId: opciones.contentPieceId,
+    filePath: path,
+    fileName: opciones.file.name,
+    fileType: opciones.file.type,
+    fileSize: opciones.file.size,
+    uploadedBy: opciones.uploadedBy,
+    replacesId: opciones.replacesId,
+  });
+}

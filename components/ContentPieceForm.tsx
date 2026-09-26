@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 import type { Client, ContentFormat, ContentPiece, PlatformType, Profile } from '@/types/database';
 import { FORMAT_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { createContentPiece, updateContentPiece } from '@/app/actions';
+import { createClient } from '@/lib/supabase/client';
+import {
+  TAMANO_MAXIMO_BYTES,
+  TIPOS_PERMITIDOS,
+  formatearBytes,
+  subirArchivoAPieza,
+  validarArchivo,
+} from '@/lib/attachments';
 
 function toLocalInputValue(iso?: string) {
   if (!iso) return '';
@@ -25,8 +33,14 @@ export function ContentPieceForm({
   piece?: ContentPiece;
 }) {
   const router = useRouter();
+  const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [archivos, setArchivos] = useState<File[]>([]);
+  const [progreso, setProgreso] = useState<{ nombre: string; porcentaje: number } | null>(null);
+  // Se guarda el id en cuanto la pieza existe, para que un fallo de subida posterior pueda
+  // ofrecer "Ir a la pieza" en vez de dejar al usuario sin saber que ya fue creada.
+  const [piezaCreada, setPiezaCreada] = useState<string | null>(null);
   const [clientId, setClientId] = useState(piece?.client_id ?? defaultClientId ?? clients[0]?.id ?? '');
   const [platform, setPlatform] = useState<PlatformType>(piece?.platform ?? 'instagram');
   const [contentFormat, setContentFormat] = useState<ContentFormat>(piece?.format ?? 'post');
@@ -42,8 +56,19 @@ export function ContentPieceForm({
       setError('Selecciona un cliente. Crea uno primero en la sección Clientes.');
       return;
     }
+    // Se valida antes de crear nada. Si el archivo no pasa el tope o el tipo, no queremos dejar
+    // una pieza vacía creada por un error que el navegador ya podía detectar sin tocar la red.
+    for (const archivo of archivos) {
+      const problema = validarArchivo(archivo);
+      if (problema) {
+        setError(problema);
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
+    setPiezaCreada(null);
     try {
       const isoDate = new Date(scheduledAt).toISOString();
       if (piece) {
@@ -68,6 +93,31 @@ export function ContentPieceForm({
           scheduled_at: isoDate,
           assignee_id: assigneeId || undefined,
         });
+
+        if (archivos.length > 0) {
+          // A partir de acá la pieza ya existe y no se borra si la subida falla: volver a pedirle
+          // al usuario el título, el copy y la fecha por un corte de red sería peor que dejarle un
+          // borrador al que puede subirle el archivo desde su ficha.
+          setPiezaCreada(id);
+
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+
+          // De a uno, igual que en la ficha: varios videos en paralelo se estorban.
+          for (const archivo of archivos) {
+            setProgreso({ nombre: archivo.name, porcentaje: 0 });
+            await subirArchivoAPieza({
+              supabase,
+              clientId,
+              contentPieceId: id,
+              file: archivo,
+              uploadedBy: user?.id ?? null,
+              onProgress: (porcentaje) => setProgreso({ nombre: archivo.name, porcentaje }),
+            });
+          }
+        }
+
         router.push(`/piezas/${id}`);
       }
       router.refresh();
@@ -75,6 +125,7 @@ export function ContentPieceForm({
       setError(err instanceof Error ? err.message : 'Ocurrió un error al guardar.');
     } finally {
       setLoading(false);
+      setProgreso(null);
     }
   }
 
@@ -186,7 +237,58 @@ export function ContentPieceForm({
         />
       </div>
 
+      {!piece && (
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-700">
+            Archivos (opcional)
+          </label>
+          <input
+            type="file"
+            multiple
+            accept={TIPOS_PERMITIDOS.join(',')}
+            disabled={loading}
+            onChange={(e) => setArchivos(Array.from(e.target.files ?? []))}
+            className="w-full text-sm"
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            Hasta {formatearBytes(TAMANO_MAXIMO_BYTES)} por archivo. Puedes dejarlo vacío y subirlos
+            después desde la ficha.
+          </p>
+        </div>
+      )}
+
+      {progreso && (
+        <div>
+          <p className="mb-1 truncate text-xs text-slate-500">
+            Subiendo {progreso.nombre} — {progreso.porcentaje}%
+          </p>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+            <div
+              role="progressbar"
+              aria-valuenow={progreso.porcentaje}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              className="h-full bg-brand-600 transition-all"
+              style={{ width: `${progreso.porcentaje}%` }}
+            />
+          </div>
+        </div>
+      )}
+
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+
+      {error && piezaCreada && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p>La pieza sí se creó; lo que falló fue la subida del archivo.</p>
+          <button
+            type="button"
+            onClick={() => router.push(`/piezas/${piezaCreada}`)}
+            className="mt-1 font-medium underline"
+          >
+            Ir a la pieza para subirlo desde ahí
+          </button>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
