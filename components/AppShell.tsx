@@ -6,6 +6,7 @@ import { SignOutButton } from './SignOutButton';
 const AGENCY_NAV = [
   { href: '/calendario', label: 'Calendario' },
   { href: '/pendientes', label: 'Pendientes' },
+  { href: '/ideas', label: 'Ideas' },
   { href: '/clientes', label: 'Clientes' },
   { href: '/ajustes', label: 'Ajustes' },
 ];
