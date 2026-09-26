@@ -56,7 +56,7 @@ Migración `0004`, aditiva. Dos columnas opcionales en `comments`:
 | Columna | Tipo | Nota |
 |---|---|---|
 | `attachment_id` | `uuid references attachments (id) on delete set null` | Archivo al que apunta |
-| `video_segundo` | `int` | Segundo dentro de ese archivo |
+| `video_segundo` | `int`, con `check (video_segundo is null or video_segundo >= 0)` | Segundo dentro de ese archivo |
 
 Un comentario con ambas vacías es un comentario normal. Ninguna fila existente se rompe y ningún
 consumidor actual necesita cambiar.
@@ -68,8 +68,12 @@ de aprobación. El comentario sobrevive; lo que se pierde es el ancla.
 
 Consecuencia que la interfaz debe manejar: **puede existir una fila con `video_segundo` y sin
 `attachment_id`.** Se muestra como comentario normal, indicando que el archivo al que apuntaba fue
-eliminado. No se agrega una restricción que prohíba ese estado, porque prohibirlo obligaría a
-borrar el comentario, que es lo que se quiere evitar.
+eliminado. Ese estado **solo puede originarse por el borrado del adjunto**: el `on delete set null`
+de arriba lo produce vía `UPDATE`, y el trigger de integridad (ver más abajo) lo permite ahí. Un
+`INSERT` que intente crear ese mismo estado desde el principio se rechaza. No se prohíbe el estado en
+sí, porque prohibirlo obligaría a borrar el comentario, que es lo que se quiere evitar — lo que se
+prohíbe es fabricarlo directamente, que sería la interfaz mintiendo ("un archivo que ya fue
+eliminado" cuando en realidad nunca existió).
 
 ### Integridad
 
@@ -81,7 +85,10 @@ padre y el hijo compartan `content_piece_id`, y eso quedó anotado como deuda du
 la rama anterior. Repetir el mismo hueco en una tabla nueva sería un error conocido cometido dos
 veces.
 
-Si `attachment_id` es nulo, el trigger no valida nada.
+El trigger aplica dos reglas, no una: si `attachment_id` no es nulo, exige que el adjunto pertenezca
+a la misma pieza que el comentario; y, **solo en `INSERT`**, rechaza que `video_segundo` no sea nulo
+mientras `attachment_id` sí lo es. Esa segunda regla no se aplica en `UPDATE` — que es como llega el
+estado descrito arriba, producido por el `on delete set null` al borrarse el adjunto.
 
 ### Permisos
 

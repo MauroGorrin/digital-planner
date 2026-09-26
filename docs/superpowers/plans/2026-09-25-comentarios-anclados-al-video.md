@@ -423,7 +423,7 @@ git commit -m "feat: format player timestamps and detect superseded attachments"
 
 **Interfaces:**
 - Consumes: nada de tareas anteriores más allá del módulo donde vive.
-- Produces: `saltarAlSegundo(video: HTMLVideoElement | null, segundo: number): void`.
+- Produces: `saltarAlSegundo(video: HTMLVideoElement | null, segundo: number): boolean`.
 
 **Por qué recibe el elemento y no un id:** la función queda probable sin navegador. El que resuelve el `id` es quien la llama. Y **no** se define una interfaz estructural mínima para el parámetro, como sí se hizo con `ClienteAdjuntos` en `lib/attachments.ts`: la firma real combina métodos repartidos entre `Element` (`closest`), `HTMLMediaElement` (`readyState`, `currentTime`) y `EventTarget` (`addEventListener`), y reconstruir esa combinación a mano en una interfaz propia no simplifica nada frente al tipo real `HTMLVideoElement | null` — solo agrega una superficie que puede desincronizarse del DOM real. (Aclaración sobre `closest` en concreto: con un selector literal de etiqueta como `'details'`, TypeScript ya infiere `HTMLDetailsElement | null` vía `HTMLElementTagNameMap`, sin necesitar ningún cast — no es que devuelva `Element` a secas.) En las pruebas se usa un doble con `as unknown as HTMLVideoElement`, que es honesto sobre lo que es.
 
