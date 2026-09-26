@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { addComment, deleteAttachment } from '@/app/actions';
 import { agruparPorRonda, formatearBytes, registrarAdjunto, subirConProgreso, validarArchivo } from '@/lib/attachments';
-import { formatearSegundos } from '@/lib/comentarios';
+import { formatearSegundos, idDeVideo } from '@/lib/comentarios';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
 
 interface ProgresoDeArchivo {
@@ -36,6 +36,10 @@ function FilaAdjunto({
   const [comentando, setComentando] = useState<number | null>(null);
   const [textoComentario, setTextoComentario] = useState('');
   const [enviandoComentario, setEnviandoComentario] = useState(false);
+  // Local a esta fila y pintado dentro de la caja del formulario: el error general del
+  // componente (más abajo, al pie de AttachmentUploader) queda lejos del textarea donde el
+  // usuario está mirando cuando falla el guardado.
+  const [errorComentario, setErrorComentario] = useState<string | null>(null);
 
   // La fila conserva identidad por su `key` entre renders (p. ej. tras un router.refresh() que
   // trae una URL firmada nueva), así que este estado sobreviviría a un error transitorio (URL
@@ -75,7 +79,7 @@ function FilaAdjunto({
             </div>
           ) : (
             <video
-              id={`video-${adjunto.id}`}
+              id={idDeVideo(adjunto.id)}
               controls
               preload="metadata"
               src={url}
@@ -91,7 +95,10 @@ function FilaAdjunto({
             {comentando === null ? (
               <button
                 type="button"
-                onClick={() => setComentando(Math.floor(segundoActual))}
+                onClick={() => {
+                  setErrorComentario(null);
+                  setComentando(Math.floor(segundoActual));
+                }}
                 className="text-xs font-medium text-brand-600 hover:underline"
               >
                 Comentar en {formatearSegundos(segundoActual)}
@@ -108,12 +115,14 @@ function FilaAdjunto({
                   placeholder="¿Qué hay que corregir en este momento?"
                   className="w-full rounded border border-slate-300 px-2 py-1 text-sm"
                 />
+                {errorComentario && <p className="mt-1 text-xs text-red-600">{errorComentario}</p>}
                 <div className="mt-1 flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setComentando(null);
                       setTextoComentario('');
+                      setErrorComentario(null);
                     }}
                     className="text-xs text-slate-500 hover:underline"
                   >
@@ -124,21 +133,26 @@ function FilaAdjunto({
                     disabled={enviandoComentario || !textoComentario.trim()}
                     onClick={async () => {
                       setEnviandoComentario(true);
+                      setErrorComentario(null);
                       try {
                         await onComentar(adjunto.id, comentando, textoComentario.trim());
                         setComentando(null);
                         setTextoComentario('');
-                      } catch {
-                        // comentarEnVideo ya mostró el error con setError; el formulario se
-                        // queda abierto con el texto intacto para que el usuario pueda
-                        // reintentar sin tener que volver a escribirlo.
+                      } catch (err) {
+                        // comentarEnVideo ya avisó al error general del componente; aquí se
+                        // repite en la caja del formulario, que es donde el usuario está
+                        // mirando. El formulario se queda abierto con el texto intacto para
+                        // que pueda reintentar sin volver a escribirlo.
+                        setErrorComentario(
+                          err instanceof Error ? err.message : 'No se pudo guardar el comentario.'
+                        );
                       } finally {
                         setEnviandoComentario(false);
                       }
                     }}
                     className="text-xs font-medium text-brand-600 hover:underline disabled:text-slate-400"
                   >
-                    {enviandoComentario ? 'Enviando...' : 'Comentar'}
+                    {enviandoComentario ? 'Enviando…' : 'Comentar'}
                   </button>
                 </div>
               </div>
@@ -281,8 +295,15 @@ export function AttachmentUploader({
       await addComment(piece.id, texto, undefined, { attachmentId, videoSegundo: segundo });
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo guardar el comentario.');
-      throw err;
+      const mensajeOriginal = err instanceof Error ? err.message : 'No se pudo guardar el comentario.';
+      // El trigger de Postgres describe este caso con los UUIDs crudos del adjunto y la pieza
+      // (correcto para depurar, pero no algo que un cliente de la agencia deba ver). Se traduce
+      // aquí, en el único punto donde ese mensaje llega desde el servidor a la interfaz.
+      const mensaje = /no pertenece a la pieza/.test(mensajeOriginal)
+        ? 'Ese archivo ya no está disponible en esta pieza. Actualiza la página e inténtalo de nuevo.'
+        : mensajeOriginal;
+      setError(mensaje);
+      throw new Error(mensaje);
     }
   }
 

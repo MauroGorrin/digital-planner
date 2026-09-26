@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Attachment } from '@/types/database';
-import { estaReemplazado, formatearSegundos, saltarAlSegundo } from '@/lib/comentarios';
+import { estaReemplazado, formatearSegundos, idDeVideo, saltarAlAdjunto, saltarAlSegundo } from '@/lib/comentarios';
 
 function adjunto(id: string, replacesId: string | null = null): Attachment {
   return {
@@ -84,10 +84,11 @@ function videoDoble(readyState = 1, padre: { open: boolean } | null = null): Vid
 }
 
 describe('saltarAlSegundo', () => {
-  it('mueve el reproductor cuando los metadatos ya estan cargados', () => {
+  it('mueve el reproductor cuando los metadatos ya estan cargados y devuelve true', () => {
     const video = videoDoble(1);
-    saltarAlSegundo(video as unknown as HTMLVideoElement, 42);
+    const resultado = saltarAlSegundo(video as unknown as HTMLVideoElement, 42);
 
+    expect(resultado).toBe(true);
     expect(video.currentTime).toBe(42);
     expect(video.scrollIntoView).toHaveBeenCalled();
     expect(video.addEventListener).not.toHaveBeenCalled();
@@ -120,7 +121,52 @@ describe('saltarAlSegundo', () => {
     expect(padre.open).toBe(true);
   });
 
-  it('no lanza cuando el reproductor no existe', () => {
+  it('despliega todos los <details> ancestros, no solo el mas cercano', () => {
+    // Reproduce el anidamiento real de AttachmentUploader: un <details> por ronda de revisión
+    // y, dentro, otro <details> por historial de versiones de un adjunto. Antes del arreglo,
+    // solo se desplegaba el más cercano (el historial) y el de la ronda seguía cerrado, así que
+    // el scrollIntoView apuntaba a un elemento oculto.
+    const rondaExterna: { open: boolean; parentElement: null } = { open: false, parentElement: null };
+    const historialInterno = {
+      open: false,
+      parentElement: { closest: vi.fn(() => rondaExterna) },
+    };
+    const video = videoDoble(1, historialInterno);
+
+    saltarAlSegundo(video as unknown as HTMLVideoElement, 10);
+
+    expect(historialInterno.open).toBe(true);
+    expect(rondaExterna.open).toBe(true);
+  });
+
+  it('no lanza y devuelve false cuando el reproductor no existe', () => {
     expect(() => saltarAlSegundo(null, 10)).not.toThrow();
+    expect(saltarAlSegundo(null, 10)).toBe(false);
+  });
+});
+
+describe('idDeVideo', () => {
+  it('construye el id de DOM del <video> a partir del id del adjunto', () => {
+    expect(idDeVideo('abc-123')).toBe('video-abc-123');
+  });
+});
+
+describe('saltarAlAdjunto', () => {
+  it('devuelve false cuando no hay ningun <video> con ese id en el documento', () => {
+    expect(saltarAlAdjunto('no-existe-en-el-dom', 10)).toBe(false);
+  });
+
+  it('resuelve el <video> por id y salta cuando existe en el documento', () => {
+    const video = document.createElement('video');
+    video.id = idDeVideo('adjunto-1');
+    // jsdom no implementa scrollIntoView; saltarAlSegundo lo llama siempre que hay reproductor.
+    video.scrollIntoView = vi.fn();
+    document.body.appendChild(video);
+
+    try {
+      expect(saltarAlAdjunto('adjunto-1', 5)).toBe(true);
+    } finally {
+      document.body.removeChild(video);
+    }
   });
 });

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Attachment, Comment, Profile } from '@/types/database';
 import { addComment } from '@/app/actions';
-import { estaReemplazado, formatearSegundos, saltarAlSegundo } from '@/lib/comentarios';
+import { estaReemplazado, formatearSegundos, saltarAlAdjunto } from '@/lib/comentarios';
 
 function roleLabel(role?: string) {
   if (role === 'agency_admin') return 'Agencia · Admin';
@@ -28,6 +28,9 @@ export function CommentThread({
   const [body, setBody] = useState('');
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Comentarios cuyo salto no encontró un reproductor en el documento (el navegador no pudo
+  // reproducir el archivo, así que la interfaz muestra el aviso de descarga en vez del <video>).
+  const [sinReproductor, setSinReproductor] = useState<Record<string, boolean>>({});
 
   function submit() {
     if (!body.trim()) return;
@@ -49,24 +52,28 @@ export function CommentThread({
               <span className="text-sm font-medium text-slate-800">{c.author?.full_name ?? 'Usuario'}</span>
               <span className="text-[11px] text-slate-400">{roleLabel(c.author?.role)}</span>
             </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{c.body}</p>
-            {c.video_segundo !== null && (
+            {c.video_segundo != null && (
               <div className="mt-1">
                 {c.attachment_id ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      saltarAlSegundo(
-                        document.getElementById(`video-${c.attachment_id}`) as HTMLVideoElement | null,
-                        c.video_segundo!
-                      )
-                    }
-                    className="rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 hover:underline"
-                  >
-                    {attachments.find((a) => a.id === c.attachment_id)?.file_name ?? 'Archivo'} ·{' '}
-                    {formatearSegundos(c.video_segundo)}
-                    {estaReemplazado(c.attachment_id, attachments) ? ' · versión anterior' : ''}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const salto = saltarAlAdjunto(c.attachment_id!, c.video_segundo!);
+                        setSinReproductor((prev) => ({ ...prev, [c.id]: !salto }));
+                      }}
+                      className="rounded bg-brand-50 px-2 py-0.5 text-[11px] font-medium text-brand-700 hover:underline"
+                    >
+                      {attachments.find((a) => a.id === c.attachment_id)?.file_name ?? 'Archivo'} ·{' '}
+                      {formatearSegundos(c.video_segundo)}
+                      {estaReemplazado(c.attachment_id, attachments) ? ' · versión anterior' : ''}
+                    </button>
+                    {sinReproductor[c.id] && (
+                      <p className="mt-1 text-[11px] text-amber-600">
+                        Este video no se puede reproducir aquí; descárgalo para ver ese momento.
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <span className="text-[11px] text-slate-400">
                     Apuntaba a {formatearSegundos(c.video_segundo)} de un archivo que ya fue eliminado
@@ -74,6 +81,7 @@ export function CommentThread({
                 )}
               </div>
             )}
+            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-600">{c.body}</p>
             <div className="mt-1 flex items-center gap-3">
               <span className="text-[11px] text-slate-400">{new Date(c.created_at).toLocaleString('es-MX')}</span>
               <button onClick={() => setReplyTo(c.id)} className="text-[11px] font-medium text-brand-600 hover:underline">

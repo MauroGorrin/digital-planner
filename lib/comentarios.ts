@@ -27,21 +27,29 @@ export function estaReemplazado(attachmentId: string, attachments: Attachment[])
 
 /**
  * Lleva un reproductor a un segundo concreto. Recibe el elemento ya resuelto para poder probarse
- * sin navegador; quien llama hace el document.getElementById.
+ * sin navegador; quien llama hace el document.getElementById. Devuelve false cuando no hay
+ * reproductor (por ejemplo, cuando el navegador no pudo reproducir el archivo y la interfaz
+ * muestra el aviso de descarga en su lugar en vez del <video>) para que quien llama pueda avisarle
+ * al usuario que el salto no ocurrió.
  *
  * Tres cosas que no son obvias:
- * - Si el <video> esta dentro de un <details> plegado (el historial de versiones), se despliega
- *   antes: saltar a un reproductor invisible no le sirve a nadie.
+ * - El <video> puede estar anidado dentro de más de un <details> plegado (una ronda de revisión
+ *   contiene un historial de versiones, que es otro <details>): se despliegan todos los
+ *   ancestros, no solo el más cercano, porque saltar a un reproductor visible dentro de un
+ *   contenedor todavía cerrado no le sirve a nadie.
  * - Asignar currentTime antes de que carguen los metadatos no tiene efecto, asi que en ese caso
  *   se espera a loadedmetadata.
  * - No se llama a play(): mover el reproductor es lo pedido; arrancar el audio sin que nadie lo
  *   pida es hostil.
  */
-export function saltarAlSegundo(video: HTMLVideoElement | null, segundo: number): void {
-  if (!video) return;
+export function saltarAlSegundo(video: HTMLVideoElement | null, segundo: number): boolean {
+  if (!video) return false;
 
-  const contenedor = video.closest('details');
-  if (contenedor) (contenedor as HTMLDetailsElement).open = true;
+  let contenedor = video.closest('details');
+  while (contenedor) {
+    contenedor.open = true;
+    contenedor = contenedor.parentElement?.closest('details') ?? null;
+  }
 
   if (video.readyState >= 1) {
     video.currentTime = segundo;
@@ -56,4 +64,24 @@ export function saltarAlSegundo(video: HTMLVideoElement | null, segundo: number)
   }
 
   video.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  return true;
+}
+
+/**
+ * El id de DOM que `AttachmentUploader` le pone a cada <video> y que `saltarAlAdjunto` busca.
+ * Centralizado aquí para que un cambio en un lado no rompa al otro en silencio: antes eran dos
+ * literales `video-${id}` repetidos sin nada que los atara.
+ */
+export function idDeVideo(attachmentId: string): string {
+  return `video-${attachmentId}`;
+}
+
+/**
+ * Resuelve el <video> de un adjunto por su id de DOM y salta a un segundo. Devuelve el mismo
+ * booleano que `saltarAlSegundo`: false cuando ese <video> no está en el documento (el navegador
+ * no pudo reproducirlo y la interfaz muestra el aviso de descarga en su lugar).
+ */
+export function saltarAlAdjunto(attachmentId: string, segundo: number): boolean {
+  const video = document.getElementById(idDeVideo(attachmentId));
+  return saltarAlSegundo(video as HTMLVideoElement | null, segundo);
 }
