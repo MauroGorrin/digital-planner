@@ -95,3 +95,133 @@ drop policy if exists idea_history_select on idea_status_history;
 create policy idea_history_select on idea_status_history for select using (
   exists (select 1 from ideas where id = idea_status_history.idea_id)
 );
+
+-- Las transiciones viven aca, no en la interfaz: una llamada directa a la API tiene que fallar
+-- igual que un clic. Mismo patron que las funciones de content_pieces en 0001_init.sql.
+
+create or replace function submit_idea_to_client(p_idea_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_client uuid;
+begin
+  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if not is_agency_admin() then raise exception 'Solo un administrador de agencia puede enviarla al cliente'; end if;
+  if v_old <> 'propuesta' then raise exception 'Solo una idea en propuesta se puede enviar al cliente'; end if;
+
+  update ideas set status = 'pendiente_cliente' where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by)
+    values (p_idea_id, v_old, 'pendiente_cliente', auth.uid());
+  insert into notifications (profile_id, idea_id, type, title, body)
+    select profile_id, p_idea_id, 'idea_pendiente', 'Una idea espera tu revision', null
+    from client_contacts where client_id = v_client;
+end;
+$$;
+
+create or replace function request_idea_internal_changes(p_idea_id uuid, p_note text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status;
+begin
+  select status into v_old from ideas where id = p_idea_id;
+  if v_old is null then raise exception 'La idea no existe'; end if;
+  if not is_agency_admin() then raise exception 'Solo un administrador de agencia puede pedir correccion interna'; end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir correccion exige una nota'; end if;
+  if v_old <> 'propuesta' then raise exception 'Solo una idea en propuesta se puede devolver al autor'; end if;
+
+  update ideas set status = 'correccion_interna' where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
+    values (p_idea_id, v_old, 'correccion_interna', auth.uid(), p_note);
+end;
+$$;
+
+create or replace function approve_idea(p_idea_id uuid, p_note text default null)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_client uuid;
+begin
+  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if not exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid()) then
+    raise exception 'Solo el cliente puede aprobar una idea';
+  end if;
+  if v_old <> 'pendiente_cliente' then raise exception 'Solo una idea pendiente se puede aprobar'; end if;
+
+  update ideas set status = 'aprobada' where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
+    values (p_idea_id, v_old, 'aprobada', auth.uid(), p_note);
+  insert into notifications (profile_id, idea_id, type, title, body)
+    select profile_id, p_idea_id, 'idea_aprobada', 'El cliente aprobo una idea', p_note
+    from client_assignments where client_id = v_client;
+end;
+$$;
+
+create or replace function request_idea_client_changes(p_idea_id uuid, p_note text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_client uuid;
+begin
+  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if not exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid()) then
+    raise exception 'Solo el cliente puede pedir cambios en una idea';
+  end if;
+  if coalesce(trim(p_note), '') = '' then raise exception 'Pedir correccion exige una nota'; end if;
+  if v_old <> 'pendiente_cliente' then raise exception 'Solo una idea pendiente admite pedir cambios'; end if;
+
+  update ideas set status = 'correccion_cliente' where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
+    values (p_idea_id, v_old, 'correccion_cliente', auth.uid(), p_note);
+  insert into notifications (profile_id, idea_id, type, title, body)
+    select profile_id, p_idea_id, 'idea_cambios', 'El cliente pidio cambios en una idea', p_note
+    from client_assignments where client_id = v_client;
+end;
+$$;
+
+create or replace function discard_idea(p_idea_id uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_client uuid;
+begin
+  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if not (
+    is_agency()
+    or exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid())
+  ) then
+    raise exception 'No autorizado';
+  end if;
+  if coalesce(trim(p_reason), '') = '' then raise exception 'Descartar exige un motivo'; end if;
+  if v_old = 'convertida' then raise exception 'Una idea ya convertida en pieza no se descarta'; end if;
+
+  update ideas set status = 'descartada' where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
+    values (p_idea_id, v_old, 'descartada', auth.uid(), p_reason);
+end;
+$$;
+
+-- No necesita saber quien pidio el cambio: lo deduce del estado. Si viene de correccion interna
+-- vuelve al filtro interno; si viene del cliente vuelve directo al cliente, sin repetir el filtro.
+-- Repetirlo haria que cada ida y vuelta con el cliente pasara dos veces por el equipo.
+create or replace function resubmit_idea(p_idea_id uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare v_old idea_status; v_new idea_status; v_client uuid;
+begin
+  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  if v_client is null then raise exception 'La idea no existe'; end if;
+  if not is_agency() then raise exception 'Solo la agencia puede reenviar una idea'; end if;
+
+  if v_old = 'correccion_interna' then
+    v_new := 'propuesta';
+  elsif v_old = 'correccion_cliente' then
+    v_new := 'pendiente_cliente';
+  else
+    raise exception 'Solo una idea en correccion se puede reenviar';
+  end if;
+
+  update ideas set status = v_new where id = p_idea_id;
+  insert into idea_status_history (idea_id, from_status, to_status, changed_by)
+    values (p_idea_id, v_old, v_new, auth.uid());
+
+  if v_new = 'pendiente_cliente' then
+    insert into notifications (profile_id, idea_id, type, title, body)
+      select profile_id, p_idea_id, 'idea_pendiente', 'Una idea corregida espera tu revision', null
+      from client_contacts where client_id = v_client;
+  end if;
+end;
+$$;
