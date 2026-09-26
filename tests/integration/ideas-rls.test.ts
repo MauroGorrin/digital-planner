@@ -21,7 +21,7 @@ const correos = {
   cliente: `ideas-cliente-${sufijo}@prueba.local`,
 };
 
-const ids = { agencia: '', cliente: '', marca: '' };
+const ids = { agencia: '', cliente: '', marca: '', marcaB: '' };
 
 async function crearUsuario(email: string) {
   const { data, error } = await admin.auth.admin.createUser({
@@ -40,11 +40,11 @@ async function sesionDe(email: string): Promise<SupabaseClient> {
   return cliente;
 }
 
-async function crearIdea(titulo: string, status: string) {
+async function crearIdea(titulo: string, status: string, clientId: string = ids.marca) {
   const { data, error } = await admin
     .from('ideas')
     .insert({
-      client_id: ids.marca,
+      client_id: clientId,
       title: titulo,
       description: 'Descripcion de prueba',
       status,
@@ -77,10 +77,28 @@ beforeAll(async () => {
 
   await admin.from('client_contacts').insert({ client_id: ids.marca, profile_id: ids.cliente });
   await admin.from('client_assignments').insert({ client_id: ids.marca, profile_id: ids.agencia });
+
+  // Segunda marca, sin ningun contacto asignado: la unica forma de que un contacto de `ids.marca`
+  // termine leyendo algo de aqui es que la politica no aisle por marca. Vive en el fixture
+  // compartido (no dentro de una sola prueba) porque cualquier prueba de esta suite se beneficia
+  // de tener una marca ajena con la que probar fugas cruzadas.
+  const { data: marcaB, error: errorMarcaB } = await admin
+    .from('clients')
+    .insert({
+      name: `Marca ideas B ${sufijo}`,
+      brand_name: 'Ideas B',
+      timezone: 'America/Mexico_City',
+      created_by: ids.agencia,
+    })
+    .select('id')
+    .single();
+  if (errorMarcaB) throw errorMarcaB;
+  ids.marcaB = marcaB.id;
 });
 
 afterAll(async () => {
   await admin.from('clients').delete().eq('id', ids.marca);
+  await admin.from('clients').delete().eq('id', ids.marcaB);
   for (const id of [ids.agencia, ids.cliente]) {
     if (id) await admin.auth.admin.deleteUser(id);
   }
@@ -158,4 +176,66 @@ describe('visibilidad de ideas', () => {
       expect((data ?? []).some((h) => h.note?.includes('Nota interna'))).toBe(false);
     }
   );
+
+  it(
+    // Se prueba la fila de historial, no la idea: la idea se deja en 'aprobada' (visible para el
+    // cliente via ideas_select) a proposito. Si en cambio la idea quedara en 'descartada',
+    // ideas_select ya escondería la idea entera y esta prueba pasaria por el motivo equivocado --
+    // el cliente no veria nada porque la idea desaparecio, no porque la fila de historial se haya
+    // filtrado. Agregar 'descartada' a la lista de to_status visibles de la politica (el edit mas
+    // plausible sobre esa linea, porque se ve como un estado de idea mas) haria que este caso
+    // pasara en verde si no existiera esta prueba.
+    'un contacto del cliente no lee una fila de historial a descartada, aunque la idea siga visible',
+    async () => {
+      const idea = await crearIdea('Aprobada con un descarte fantasma en el historial', 'aprobada');
+
+      const { error } = await admin.from('idea_status_history').insert([
+        { idea_id: idea, from_status: 'pendiente_cliente', to_status: 'aprobada' },
+        {
+          idea_id: idea,
+          from_status: 'aprobada',
+          to_status: 'descartada',
+          note: 'Motivo interno de agencia: ya no aplica',
+        },
+      ]);
+      if (error) throw error;
+
+      const cliente = await sesionDe(correos.cliente);
+      const { data } = await cliente
+        .from('idea_status_history')
+        .select('to_status, note')
+        .eq('idea_id', idea);
+
+      const vistos = (data ?? []).map((h) => h.to_status);
+      expect(vistos).toContain('aprobada');
+      expect(vistos).not.toContain('descartada');
+      expect((data ?? []).some((h) => h.note?.includes('Motivo interno'))).toBe(false);
+    }
+  );
+
+  // Lo que esta prueba fija y lo que NO: comprobado corriendo la politica mutada.
+  // Caza que alguien borre el vinculo con ideas (dejando solo el filtro por to_status): ahi la fila
+  // de la marca B se volveria legible y este caso cae. NO caza que alguien borre solo el exists
+  // anidado de client_contacts: ese subquery corre bajo la RLS del llamador, ideas_select ya le
+  // esconde la idea de la marca B, y los 34 tests pasan en verde con la politica rota (verificado).
+  // Que la politica del historial aisle por marca POR SI SOLA no es demostrable desde una prueba:
+  // hay que aflojar ideas_select a mano, porque una prueba no puede mutar una politica. Si tocas
+  // esa linea de la politica, no te apoyes en esta prueba -- leela y razonala.
+  it('un contacto de la marca A no lee el historial de una idea de la marca B', async () => {
+    const ideaDeOtraMarca = await crearIdea('Aprobada en otra marca', 'aprobada', ids.marcaB);
+
+    const { error } = await admin.from('idea_status_history').insert({
+      idea_id: ideaDeOtraMarca,
+      from_status: 'pendiente_cliente',
+      to_status: 'aprobada',
+      note: 'Nota de la marca B',
+    });
+    if (error) throw error;
+
+    // ids.cliente es contacto de ids.marca (marca A), no de ids.marcaB.
+    const cliente = await sesionDe(correos.cliente);
+    const { data } = await cliente.from('idea_status_history').select('id').eq('idea_id', ideaDeOtraMarca);
+
+    expect(data).toEqual([]);
+  });
 });
