@@ -1,11 +1,12 @@
 import Link from 'next/link';
-import type { ContentPiece, Profile } from '@/types/database';
+import type { ContentPiece, Idea, Profile } from '@/types/database';
+import { IDEA_STATUS_LABELS } from '@/types/database';
 import { StatusBadge } from './StatusBadge';
 import { PlatformBadge } from './PlatformBadge';
 import { EmptyState } from './EmptyState';
 import { formatDateTimeInTz } from '@/lib/tz';
 
-export function PendingList({ profile, pieces }: { profile: Profile; pieces: ContentPiece[] }) {
+export function PendingList({ profile, pieces, ideas }: { profile: Profile; pieces: ContentPiece[]; ideas: Idea[] }) {
   const now = Date.now();
   const needsAttention = pieces.filter((p) => p.status === 'pendiente_revision' || p.status === 'cambios_solicitados');
   const upcoming = pieces
@@ -13,6 +14,9 @@ export function PendingList({ profile, pieces }: { profile: Profile; pieces: Con
     .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at));
   const overdue = upcoming.filter((p) => new Date(p.scheduled_at).getTime() < now);
   const onTrack = upcoming.filter((p) => new Date(p.scheduled_at).getTime() >= now);
+
+  const esAgencia = profile.role !== 'client';
+  const ideasPendientes = esAgencia ? ideas : ideas.filter((i) => i.status === 'pendiente_cliente');
 
   return (
     <div className="space-y-8">
@@ -24,6 +28,15 @@ export function PendingList({ profile, pieces }: { profile: Profile; pieces: Con
           </a>
         )}
       </div>
+
+      {ideasPendientes.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">
+            {esAgencia ? 'Ideas esperando respuesta del cliente' : 'Ideas esperando tu revisión'}
+          </h2>
+          <IdeaTable ideas={ideasPendientes} showClient={esAgencia} showStatus={esAgencia} />
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-700">
@@ -86,6 +99,35 @@ function PieceTable({ pieces, showClient, highlightOverdue }: { pieces: ContentP
               <td className="px-4 py-2.5">
                 <StatusBadge status={p.status} />
               </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function IdeaTable({ ideas, showClient, showStatus }: { ideas: Idea[]; showClient: boolean; showStatus: boolean }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+          <tr>
+            <th className="px-4 py-2">Idea</th>
+            {showClient && <th className="px-4 py-2">Cliente</th>}
+            {showStatus && <th className="px-4 py-2">Estado</th>}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {ideas.map((idea) => (
+            <tr key={idea.id} className="hover:bg-slate-50">
+              <td className="px-4 py-2.5">
+                <Link href="/ideas" className="font-medium text-brand-700 hover:underline">
+                  {idea.title}
+                </Link>
+              </td>
+              {showClient && <td className="px-4 py-2.5 text-slate-600">{idea.clients?.brand_name}</td>}
+              {showStatus && <td className="px-4 py-2.5 text-slate-600">{IDEA_STATUS_LABELS[idea.status]}</td>}
             </tr>
           ))}
         </tbody>

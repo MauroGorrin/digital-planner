@@ -14,6 +14,7 @@ const AGENCY_NAV = [
 const CLIENT_NAV = [
   { href: '/calendario', label: 'Calendario' },
   { href: '/pendientes', label: 'Pendientes' },
+  { href: '/ideas', label: 'Ideas' },
 ];
 
 export function AppShell({ profile, children }: { profile: Profile; children: React.ReactNode }) {
