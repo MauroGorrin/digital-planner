@@ -16,7 +16,13 @@ export function PendingList({ profile, pieces, ideas }: { profile: Profile; piec
   const onTrack = upcoming.filter((p) => new Date(p.scheduled_at).getTime() >= now);
 
   const esAgencia = profile.role !== 'client';
-  const ideasPendientes = esAgencia ? ideas : ideas.filter((i) => i.status === 'pendiente_cliente');
+  // Para la agencia, correccion_cliente va primero: ahí el cliente ya pidió un cambio y la agencia
+  // debe reenviar la idea ya; pendiente_cliente solo espera al cliente, la agencia no tiene nada que
+  // hacer todavía. Sort estable (Array.prototype.sort lo garantiza) para no perder el orden por
+  // fecha que ya trae la consulta de la página — no se reordena por fecha aquí.
+  const ideasPendientes = esAgencia
+    ? [...ideas].sort((a, b) => Number(a.status !== 'correccion_cliente') - Number(b.status !== 'correccion_cliente'))
+    : ideas.filter((i) => i.status === 'pendiente_cliente');
 
   return (
     <div className="space-y-8">
