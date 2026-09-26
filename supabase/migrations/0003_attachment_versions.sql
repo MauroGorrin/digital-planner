@@ -2,16 +2,29 @@
 -- Aditiva: las filas existentes quedan validas con los valores por defecto.
 
 alter table attachments
-  add column replaces_id uuid references attachments (id) on delete set null,
-  add column review_round int not null default 1;
+  add column if not exists replaces_id uuid references attachments (id) on delete set null,
+  add column if not exists review_round int not null default 1;
 
 -- Postgres admite multiples NULL en un unique, y eso es lo buscado: muchos adjuntos
 -- originales (replaces_id is null) conviven sin problema. La restriccion solo impide
 -- que dos archivos declaren el mismo padre y la cadena se bifurque.
-alter table attachments
-  add constraint attachments_replaces_id_unique unique (replaces_id);
+--
+-- El bloque do $$ es por repetibilidad, igual que en 0004: este archivo se aplica a mano, pegado
+-- en el editor SQL del panel de Supabase, y si una aplicacion previa quedo a medias hay que poder
+-- reintentarla sin que falle con "constraint already exists". El resto del archivo ya usa
+-- if not exists; esta era la unica sentencia que no.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'attachments_replaces_id_unique'
+  ) then
+    alter table attachments
+      add constraint attachments_replaces_id_unique unique (replaces_id);
+  end if;
+end;
+$$;
 
-create index idx_attachments_piece_round on attachments (content_piece_id, review_round);
+create index if not exists idx_attachments_piece_round on attachments (content_piece_id, review_round);
 
 -- La ronda la decide la base, nunca el navegador: sobrescribe lo que llegue del cliente.
 create or replace function set_attachment_round()
