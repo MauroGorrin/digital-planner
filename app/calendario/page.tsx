@@ -3,7 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { CalendarBoard } from '@/components/CalendarBoard';
 import { getMonthGridRange, getWeekRange } from '@/lib/date-utils';
-import type { Client, ContentPiece } from '@/types/database';
+import { adjuntoDePortada } from '@/lib/attachments';
+import type { Portada } from '@/components/TarjetaDePieza';
+import type { Attachment, Client, ContentPiece } from '@/types/database';
 
 export default async function CalendarioPage({
   searchParams,
@@ -27,12 +29,69 @@ export default async function CalendarioPage({
       .order('scheduled_at'),
   ]);
 
+  const listaPiezas = (pieces ?? []) as ContentPiece[];
+
+  // Portadas para la tarjeta de vista previa: una consulta por los adjuntos de las piezas
+  // visibles, y una sola llamada por lote para firmar las URLs de las que son imagen.
+  //
+  // Firmar no consume transferencia; descargar la imagen si. Y la imagen solo se descarga cuando
+  // la tarjeta aparece, porque hasta entonces el <img> no existe en el DOM. Asi el trafico se
+  // paga por lo que se mira, no por lo que se carga -- que importa con 10 GB al mes en el plan
+  // gratuito de Supabase.
+  const portadas: Record<string, Portada> = {};
+
+  if (listaPiezas.length > 0) {
+    const { data: adjuntos } = await supabase
+      .from('attachments')
+      .select('*')
+      .in(
+        'content_piece_id',
+        listaPiezas.map((p) => p.id)
+      );
+
+    const porPieza = new Map<string, Attachment[]>();
+    for (const adjunto of (adjuntos ?? []) as Attachment[]) {
+      const lista = porPieza.get(adjunto.content_piece_id) ?? [];
+      lista.push(adjunto);
+      porPieza.set(adjunto.content_piece_id, lista);
+    }
+
+    const aFirmar: { pieceId: string; ruta: string }[] = [];
+    for (const [pieceId, lista] of porPieza) {
+      const portada = adjuntoDePortada(lista);
+      if (!portada) continue;
+
+      portadas[pieceId] = {
+        fileName: portada.file_name,
+        fileType: portada.file_type,
+        url: null,
+      };
+      if (portada.file_type?.startsWith('image/')) {
+        aFirmar.push({ pieceId, ruta: portada.file_path });
+      }
+    }
+
+    if (aFirmar.length > 0) {
+      const { data: firmadas } = await supabase.storage
+        .from('attachments')
+        .createSignedUrls(
+          aFirmar.map((f) => f.ruta),
+          3600
+        );
+      (firmadas ?? []).forEach((firmada, i) => {
+        const destino = portadas[aFirmar[i].pieceId];
+        if (destino && firmada.signedUrl) destino.url = firmada.signedUrl;
+      });
+    }
+  }
+
   return (
     <AppShell profile={profile}>
       <CalendarBoard
         profile={profile}
         clients={(clients ?? []) as Client[]}
-        pieces={(pieces ?? []) as ContentPiece[]}
+        pieces={listaPiezas}
+        portadas={portadas}
         view={view}
         anchorDate={anchor.toISOString()}
       />

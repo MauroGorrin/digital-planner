@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { addDays, addMonths, addWeeks, format, isSameMonth, isToday } from 'date-fns';
@@ -13,18 +13,21 @@ import { PlatformDot } from './PlatformBadge';
 import { StatusBadge } from './StatusBadge';
 import { rescheduleContentPiece } from '@/app/actions';
 import { EmptyState } from './EmptyState';
+import { TarjetaDePieza, type Portada } from './TarjetaDePieza';
 import type { Profile } from '@/types/database';
 
 export function CalendarBoard({
   profile,
   clients,
   pieces,
+  portadas,
   view,
   anchorDate,
 }: {
   profile: Profile;
   clients: Client[];
   pieces: ContentPiece[];
+  portadas: Record<string, Portada>;
   view: 'mes' | 'semana';
   anchorDate: string;
 }) {
@@ -35,8 +38,31 @@ export function CalendarBoard({
   const [formatFilter, setFormatFilter] = useState('todos');
   const [statusFilter, setStatusFilter] = useState('todos');
   const [dragId, setDragId] = useState<string | null>(null);
+  const [piezaEnFoco, setPiezaEnFoco] = useState<string | null>(null);
+  const temporizadorTarjeta = useRef<ReturnType<typeof setTimeout> | null>(null);
   const anchor = new Date(anchorDate);
   const canDrag = profile.role !== 'client';
+
+  // El retardo evita que la tarjeta parpadee al arrastrar el puntero por la grilla. Al enfocar
+  // con el teclado se pasa 0: ahi la intencion ya es explicita y esperar solo estorba.
+  function mostrarTarjeta(id: string, retardo = 350) {
+    if (temporizadorTarjeta.current) clearTimeout(temporizadorTarjeta.current);
+    temporizadorTarjeta.current = setTimeout(() => setPiezaEnFoco(id), retardo);
+  }
+
+  function ocultarTarjeta() {
+    if (temporizadorTarjeta.current) clearTimeout(temporizadorTarjeta.current);
+    setPiezaEnFoco(null);
+  }
+
+  // Sin esto, cambiar de mes con el puntero encima deja un temporizador vivo que intenta mostrar
+  // una tarjeta de una pieza que ya no esta en pantalla.
+  useEffect(
+    () => () => {
+      if (temporizadorTarjeta.current) clearTimeout(temporizadorTarjeta.current);
+    },
+    []
+  );
 
   const filtered = useMemo(() => {
     return pieces.filter((p) => {
@@ -185,8 +211,18 @@ export function CalendarBoard({
                 {d}
               </div>
             ))}
-          {days.map((day) => {
+          {days.map((day, indiceDia) => {
             const dayPieces = piecesForDay(day);
+            // La tarjeta mide 288px y una columna mucho menos, asi que centrada se saldria de la
+            // pantalla en los bordes. En las dos primeras columnas se ancla a la izquierda y en
+            // las dos ultimas a la derecha; en el medio va centrada.
+            const columna = view === 'mes' ? indiceDia % 7 : 0;
+            const anclaje =
+              columna <= 1
+                ? 'left-0'
+                : columna >= 5
+                  ? 'right-0'
+                  : 'left-1/2 -translate-x-1/2';
             return (
               <div
                 key={day.toISOString()}
@@ -210,21 +246,40 @@ export function CalendarBoard({
                 </div>
                 <div className="space-y-1">
                   {dayPieces.map((piece) => (
-                    <Link
+                    <div
                       key={piece.id}
-                      href={`/piezas/${piece.id}`}
-                      draggable={canDrag}
-                      onDragStart={() => setDragId(piece.id)}
-                      className="block rounded-md border border-slate-100 bg-slate-50 px-1.5 py-1 text-[11px] leading-tight hover:bg-slate-100"
+                      className="relative"
+                      onMouseEnter={() => mostrarTarjeta(piece.id)}
+                      onMouseLeave={ocultarTarjeta}
                     >
-                      <div className="flex items-center gap-1">
-                        <PlatformDot platform={piece.platform} />
-                        <span className="font-medium text-slate-700">{formatTimeInTz(piece.scheduled_at, piece.clients?.timezone ?? 'UTC')}</span>
-                      </div>
-                      <p className="truncate text-slate-600">{piece.title}</p>
-                      {profile.role !== 'client' && <p className="truncate text-[10px] text-slate-400">{piece.clients?.brand_name}</p>}
-                      <StatusBadge status={piece.status} className="mt-0.5 px-1.5 py-0.5 text-[9px]" />
-                    </Link>
+                      <Link
+                        href={`/piezas/${piece.id}`}
+                        draggable={canDrag}
+                        onDragStart={() => {
+                          setDragId(piece.id);
+                          ocultarTarjeta();
+                        }}
+                        onFocus={() => mostrarTarjeta(piece.id, 0)}
+                        onBlur={ocultarTarjeta}
+                        className="block rounded-md border border-slate-100 bg-slate-50 px-1.5 py-1 text-[11px] leading-tight hover:bg-slate-100"
+                      >
+                        <div className="flex items-center gap-1">
+                          <PlatformDot platform={piece.platform} />
+                          <span className="font-medium text-slate-700">{formatTimeInTz(piece.scheduled_at, piece.clients?.timezone ?? 'UTC')}</span>
+                        </div>
+                        <p className="truncate text-slate-600">{piece.title}</p>
+                        {profile.role !== 'client' && <p className="truncate text-[10px] text-slate-400">{piece.clients?.brand_name}</p>}
+                        <StatusBadge status={piece.status} className="mt-0.5 px-1.5 py-0.5 text-[9px]" />
+                      </Link>
+
+                      {piezaEnFoco === piece.id && (
+                        // pointer-events-none: la tarjeta no debe robarle el hover a la pieza ni
+                        // taparle el clic, porque el clic sigue siendo "abrir la ficha".
+                        <div className={`pointer-events-none absolute bottom-full z-20 mb-1 ${anclaje}`}>
+                          <TarjetaDePieza piece={piece} portada={portadas[piece.id]} />
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

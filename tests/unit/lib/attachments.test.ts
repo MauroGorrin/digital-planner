@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  adjuntoDePortada,
   TAMANO_MAXIMO_BYTES,
   agruparPorRonda,
   formatearBytes,
@@ -540,5 +541,37 @@ describe('subirConProgreso', () => {
       await promesaRechazada;
       expect(xhr.abortLlamado).toBe(true);
     });
+  });
+});
+
+describe('adjuntoDePortada', () => {
+  it('no devuelve nada cuando la pieza no tiene adjuntos', () => {
+    expect(adjuntoDePortada([])).toBeNull();
+  });
+
+  it('ignora las versiones reemplazadas y devuelve la vigente', () => {
+    const v1 = adjunto({ id: 'v1', review_round: 1 });
+    const v2 = adjunto({ id: 'v2', review_round: 1, replaces_id: 'v1' });
+    expect(adjuntoDePortada([v1, v2])?.id).toBe('v2');
+  });
+
+  it('prefiere la ronda mas alta, que es el corte que se esta revisando ahora', () => {
+    const ronda1 = adjunto({ id: 'viejo', review_round: 1 });
+    const ronda2 = adjunto({ id: 'nuevo', review_round: 2 });
+    expect(adjuntoDePortada([ronda1, ronda2])?.id).toBe('nuevo');
+  });
+
+  it('dentro de la misma ronda se queda con el mas reciente', () => {
+    const temprano = adjunto({ id: 'temprano', review_round: 1, created_at: '2026-09-25T10:00:00Z' });
+    const tarde = adjunto({ id: 'tarde', review_round: 1, created_at: '2026-09-25T12:00:00Z' });
+    expect(adjuntoDePortada([temprano, tarde])?.id).toBe('tarde');
+  });
+
+  it('devuelve el unico adjunto cuando todos fueron reemplazados en cadena', () => {
+    // a <- b <- c: solo c queda sin reemplazar.
+    const a = adjunto({ id: 'a', review_round: 1 });
+    const b = adjunto({ id: 'b', review_round: 1, replaces_id: 'a' });
+    const c = adjunto({ id: 'c', review_round: 1, replaces_id: 'b' });
+    expect(adjuntoDePortada([a, b, c])?.id).toBe('c');
   });
 });

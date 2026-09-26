@@ -358,3 +358,31 @@ export async function subirArchivoAPieza(opciones: {
     replacesId: opciones.replacesId,
   });
 }
+
+/**
+ * El adjunto que representa a la pieza en una vista compacta -- hoy, la tarjeta del calendario.
+ *
+ * Es el vigente (ninguno lo reemplaza) de la ronda mas alta: el corte que se esta revisando
+ * ahora, no el primero que se subio. Dentro de una misma ronda gana el mas reciente.
+ *
+ * Deriva de replaces_id y review_round en vez de guardar una marca de "portada", por lo mismo
+ * que agruparPorRonda: un segundo estado guardado se desincroniza del primero.
+ *
+ * Devuelve null si no hay adjuntos, y tambien si todos estan reemplazados -- que solo puede pasar
+ * con una cadena ciclica, imposible desde la interfaz pero no desde la base.
+ */
+export function adjuntoDePortada(attachments: Attachment[]): Attachment | null {
+  const reemplazados = new Set(
+    attachments.map((a) => a.replaces_id).filter((id): id is string => id !== null)
+  );
+  const vigentes = attachments.filter((a) => !reemplazados.has(a.id));
+  if (vigentes.length === 0) return null;
+
+  return vigentes.reduce((mejor, actual) => {
+    if (actual.review_round !== mejor.review_round) {
+      return actual.review_round > mejor.review_round ? actual : mejor;
+    }
+    // created_at es ISO 8601 en UTC, asi que comparar como texto ordena igual que como fecha.
+    return actual.created_at > mejor.created_at ? actual : mejor;
+  });
+}
