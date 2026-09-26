@@ -2,6 +2,7 @@ import { requireAgency } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { ContentPieceForm } from '@/components/ContentPieceForm';
+import { ideaSirveComoOrigenDePieza } from '@/lib/ideas';
 import type { Client, Idea, Profile } from '@/types/database';
 
 export default async function NuevaPiezaPage({
@@ -19,7 +20,10 @@ export default async function NuevaPiezaPage({
       : Promise.resolve({ data: null }),
   ]);
 
-  const ideaOrigen = idea as Idea | null;
+  // Un enlace viejo (idea ya convertida, o todavia en propuesta) no debe ofrecer un formulario
+  // prellenado que convert_idea_to_piece va a rechazar: degrada a un formulario en blanco.
+  const ideaCargada = idea as Idea | null;
+  const ideaOrigen = ideaCargada && ideaSirveComoOrigenDePieza(ideaCargada) ? ideaCargada : null;
 
   return (
     <AppShell profile={profile}>

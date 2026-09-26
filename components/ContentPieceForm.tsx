@@ -153,12 +153,17 @@ export function ContentPieceForm({
           Aún no tienes clientes. Crea uno en la sección Clientes antes de planificar contenido.
         </p>
       )}
+      {ideaOrigen && (
+        <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600">
+          Esta pieza viene de la idea «{ideaOrigen.title}»; su marca queda fija, tomada de esa idea.
+        </p>
+      )}
       <div>
         <label className="mb-1 block text-sm font-medium text-slate-700">Cliente / Marca</label>
         <select
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
-          disabled={!!piece}
+          disabled={!!piece || !!ideaOrigen}
           className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-50"
           required
         >

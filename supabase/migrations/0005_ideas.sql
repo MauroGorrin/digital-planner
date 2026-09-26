@@ -240,7 +240,7 @@ begin
   select client_id into v_client_pieza from content_pieces where id = p_content_piece_id;
   if v_client_pieza is null then raise exception 'La pieza no existe'; end if;
   if v_client_pieza <> v_client_idea then
-    raise exception 'La pieza pertenece a otra marca que la idea';
+    raise exception 'La pieza pertenece a una marca distinta a la de la idea';
   end if;
 
   update ideas

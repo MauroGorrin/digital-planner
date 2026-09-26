@@ -1,4 +1,4 @@
-import type { IdeaStatus, UserRole } from '@/types/database';
+import type { Idea, IdeaStatus, UserRole } from '@/types/database';
 
 export type AccionDeIdea =
   | 'enviar_al_cliente'
@@ -42,4 +42,16 @@ export function accionesDisponibles(
   if (esAgencia || esContactoDelCliente) acciones.push('descartar');
 
   return acciones;
+}
+
+/**
+ * Si esta idea puede usarse como origen de una pieza nueva.
+ *
+ * El mismo requisito vive en `convert_idea_to_piece` (0005_ideas.sql), que es quien de verdad lo
+ * hace cumplir. Esto existe para que `/piezas/nueva?idea=...` no le arme a un usuario un
+ * formulario prellenado que la base va a rechazar — un enlace viejo a una idea ya convertida o
+ * todavia en propuesta simplemente debe degradar a un formulario en blanco, no a un error.
+ */
+export function ideaSirveComoOrigenDePieza(idea: Pick<Idea, 'status'>): boolean {
+  return idea.status === 'aprobada';
 }

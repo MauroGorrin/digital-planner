@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accionesDisponibles } from '@/lib/ideas';
+import { accionesDisponibles, ideaSirveComoOrigenDePieza } from '@/lib/ideas';
 
 describe('accionesDisponibles', () => {
   it('un admin de agencia filtra una propuesta', () => {
@@ -45,5 +45,19 @@ describe('accionesDisponibles', () => {
   it('una idea descartada o convertida no ofrece nada', () => {
     expect(accionesDisponibles('descartada', 'agency_admin', false)).toEqual([]);
     expect(accionesDisponibles('convertida', 'agency_admin', false)).toEqual([]);
+  });
+});
+
+describe('ideaSirveComoOrigenDePieza', () => {
+  it('una idea aprobada si sirve de origen', () => {
+    expect(ideaSirveComoOrigenDePieza({ status: 'aprobada' })).toBe(true);
+  });
+
+  it('una idea todavia en propuesta no sirve de origen', () => {
+    expect(ideaSirveComoOrigenDePieza({ status: 'propuesta' })).toBe(false);
+  });
+
+  it('una idea ya convertida no sirve de origen otra vez', () => {
+    expect(ideaSirveComoOrigenDePieza({ status: 'convertida' })).toBe(false);
   });
 });
