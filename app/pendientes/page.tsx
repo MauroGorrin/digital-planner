@@ -6,7 +6,7 @@ import type { ContentPiece, Idea } from '@/types/database';
 
 export default async function PendientesPage() {
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: pieces }, { data: ideas }] = await Promise.all([
     supabase

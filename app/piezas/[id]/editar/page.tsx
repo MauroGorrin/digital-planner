@@ -5,9 +5,10 @@ import { AppShell } from '@/components/AppShell';
 import { ContentPieceForm } from '@/components/ContentPieceForm';
 import type { Client, ContentPiece, Profile } from '@/types/database';
 
-export default async function EditarPiezaPage({ params }: { params: { id: string } }) {
+export default async function EditarPiezaPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const [{ data: piece }, { data: clients }, { data: team }] = await Promise.all([
     supabase.from('content_pieces').select('*').eq('id', params.id).single(),
     supabase.from('clients').select('*').eq('archived', false).order('name'),

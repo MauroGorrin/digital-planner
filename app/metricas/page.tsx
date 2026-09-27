@@ -7,13 +7,12 @@ import type { Client, ClientPackage, ContentPiece } from '@/types/database';
 
 type MarcaConTz = MarcaOpcion & { timezone: string };
 
-export default async function MetricasPage({
-  searchParams,
-}: {
-  searchParams: { client?: string; anio?: string; mes?: string };
+export default async function MetricasPage(props: {
+  searchParams: Promise<{ client?: string; anio?: string; mes?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
   const esAgencia = profile.role !== 'client';
 
   // Marcas disponibles para el selector. Para la agencia, todas las no archivadas -- puede leer

@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   // Validar el `state` ANTES de canjear el código: es el único punto del flujo donde se distingue
   // una vuelta de nuestra propia redirección de un callback que alguien provocó desde fuera
   // (CN-005). requireAgencyAdmin() no protege de nada aquí -- la víctima es el admin.
-  const almacen = cookies();
+  const almacen = await cookies();
   const esperado = almacen.get(COOKIE_ESTADO)?.value;
   const recibido = searchParams.get('state') ?? '';
   if (!estadoCoincide(esperado, recibido)) {
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
   });
   const calendarId = calRes.ok ? (await calRes.json()).id : 'primary';
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('google_calendar_connections').insert({
     label: etiqueta,
     calendar_id: calendarId,

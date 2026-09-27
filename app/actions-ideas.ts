@@ -8,7 +8,7 @@ import type { ContentFormat, PlatformType } from '@/types/database';
 import { errorParaElCliente } from '@/lib/errores';
 
 async function llamar(rpc: string, args: Record<string, unknown>) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc(rpc, args);
   if (error) throw errorParaElCliente(error, rpc);
   revalidatePath('/ideas');
@@ -24,7 +24,7 @@ export async function crearIdea(input: {
   suggested_format?: ContentFormat;
 }) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('ideas').insert({
     client_id: input.client_id,
     title: input.title,

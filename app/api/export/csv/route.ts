@@ -20,7 +20,7 @@ export async function GET() {
   // de API. El caso sin sesion lo ataja el middleware antes de llegar aqui, no el 401 de arriba.
   if (profile.role === 'client') return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: pieces } = await supabase
     .from('content_pieces')
     .select('*, clients(name,brand_name,timezone)')

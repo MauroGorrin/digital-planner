@@ -18,9 +18,10 @@ const MENSAJES_DE_ERROR: Record<string, string> = {
 };
 
 
-export default async function AjustesPage({ searchParams }: { searchParams: { error?: string; google?: string } }) {
+export default async function AjustesPage(props: { searchParams: Promise<{ error?: string; google?: string }> }) {
+  const searchParams = await props.searchParams;
   const profile = await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: webhooks }, { data: connections }, { data: team }] = await Promise.all([
     supabase.from('webhook_configs').select('id,name,url,active,events,created_at').order('created_at', { ascending: false }),

@@ -7,7 +7,7 @@ import type { Client } from '@/types/database';
 
 export default async function ClientesPage() {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: clients } = await supabase.from('clients').select('*').order('archived').order('name');
 
   const list = (clients ?? []) as Client[];

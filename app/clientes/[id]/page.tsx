@@ -5,9 +5,10 @@ import { AppShell } from '@/components/AppShell';
 import { ClientDetail } from '@/components/ClientDetail';
 import type { Client, Profile } from '@/types/database';
 
-export default async function ClienteDetailPage({ params }: { params: { id: string } }) {
+export default async function ClienteDetailPage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [
     { data: client },

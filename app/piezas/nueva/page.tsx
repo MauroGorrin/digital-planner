@@ -5,13 +5,12 @@ import { ContentPieceForm } from '@/components/ContentPieceForm';
 import { ideaSirveComoOrigenDePieza } from '@/lib/ideas';
 import type { Client, Idea, Profile } from '@/types/database';
 
-export default async function NuevaPiezaPage({
-  searchParams,
-}: {
-  searchParams: { client?: string; idea?: string };
+export default async function NuevaPiezaPage(props: {
+  searchParams: Promise<{ client?: string; idea?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const [{ data: clients }, { data: team }, { data: idea }] = await Promise.all([
     supabase.from('clients').select('*').eq('archived', false).order('name'),
     supabase.from('profiles').select('*').in('role', ['agency_admin', 'agency_member']).order('full_name'),

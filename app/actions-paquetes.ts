@@ -13,7 +13,7 @@ import { errorParaElCliente } from '@/lib/errores';
  */
 export async function definirCuotaDeFormato(clientId: string, format: ContentFormat, monthlyQuota: number) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase
     .from('client_packages')
     .upsert({ client_id: clientId, format, monthly_quota: monthlyQuota }, { onConflict: 'client_id,format' });
@@ -28,7 +28,7 @@ export async function definirCuotaDeFormato(clientId: string, format: ContentFor
  */
 export async function quitarFormatoDelPaquete(clientId: string, format: ContentFormat) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('client_packages').delete().eq('client_id', clientId).eq('format', format);
   if (error) throw errorParaElCliente(error, 'quitarFormatoDelPaquete');
   revalidatePath('/metricas');

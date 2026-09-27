@@ -8,8 +8,13 @@ import 'server-only';
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
-export function createClient() {
-  const cookieStore = cookies();
+// En Next 15 `cookies()` devuelve una promesa, asi que esta funcion pasa a ser async y cada llamada
+// la espera. No se usa el atajo `UnsafeUnwrappedCookies` que propuso el codemod: ese acceso
+// sincrono esta deprecado y se quita en la proxima version mayor, y aqui no solo se LEEN las cookies
+// de sesion de Supabase, tambien se ESCRIBEN. Si un dia deja de funcionar sin avisar, se cae la
+// sesion de todo el mundo.
+export async function createClient() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

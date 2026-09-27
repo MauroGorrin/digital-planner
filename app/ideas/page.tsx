@@ -7,7 +7,7 @@ import type { Client, Idea, IdeaStatusHistoryEntry } from '@/types/database';
 
 export default async function IdeasPage() {
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const [{ data: ideas }, { data: clients }, { data: contactos }] = await Promise.all([
     supabase

@@ -5,9 +5,10 @@ import { AppShell } from '@/components/AppShell';
 import { ContentPieceDetail } from '@/components/ContentPieceDetail';
 import type { Attachment, Client, Comment, ContentPiece, StatusHistoryEntry } from '@/types/database';
 
-export default async function ContentPiecePage({ params }: { params: { id: string } }) {
+export default async function ContentPiecePage(props: { params: Promise<{ id: string }> }) {
+  const params = await props.params;
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: piece } = await supabase
     .from('content_pieces')

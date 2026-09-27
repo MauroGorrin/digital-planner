@@ -9,7 +9,7 @@ import { urlDeWebhookValidada } from '@/lib/webhooks/url-valida';
 
 export async function createClientEntity(input: { name: string; brand_name: string; timezone: string; notes?: string }) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from('clients')
     .insert({ ...input, created_by: profile.id })
@@ -25,7 +25,7 @@ export async function updateClientEntity(
   input: Partial<{ name: string; brand_name: string; timezone: string; notes: string; archived: boolean }>
 ) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('clients').update(input).eq('id', id);
   if (error) throw errorParaElCliente(error, 'updateClientEntity');
   revalidatePath('/clientes');
@@ -80,7 +80,7 @@ export async function inviteUser(input: { email: string; full_name: string; role
 
 export async function removeClientContact(clientId: string, profileId: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('client_contacts').delete().eq('client_id', clientId).eq('profile_id', profileId);
   if (error) throw errorParaElCliente(error, 'removeClientContact');
   revalidatePath(`/clientes/${clientId}`);
@@ -88,7 +88,7 @@ export async function removeClientContact(clientId: string, profileId: string) {
 
 export async function removeTeamAssignment(clientId: string, profileId: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('client_assignments').delete().eq('client_id', clientId).eq('profile_id', profileId);
   if (error) throw errorParaElCliente(error, 'removeTeamAssignment');
   revalidatePath(`/clientes/${clientId}`);
@@ -96,7 +96,7 @@ export async function removeTeamAssignment(clientId: string, profileId: string) 
 
 export async function assignTeamMember(clientId: string, profileId: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('client_assignments').upsert({ client_id: clientId, profile_id: profileId }, { onConflict: 'client_id,profile_id' });
   if (error) throw errorParaElCliente(error, 'assignTeamMember');
   revalidatePath(`/clientes/${clientId}`);
@@ -107,7 +107,7 @@ export async function updateNotificationSettings(
   input: { email_on_pending_review: boolean; email_on_client_response: boolean; reminder_after_days: number }
 ) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase
     .from('notification_settings')
     .upsert({ client_id: clientId, ...input, updated_at: new Date().toISOString() }, { onConflict: 'client_id' });
@@ -117,7 +117,7 @@ export async function updateNotificationSettings(
 
 export async function setClientCalendarMapping(clientId: string, connectionId: string) {
   await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase
     .from('client_calendar_mappings')
     .upsert({ client_id: clientId, connection_id: connectionId }, { onConflict: 'client_id' });
@@ -127,7 +127,7 @@ export async function setClientCalendarMapping(clientId: string, connectionId: s
 
 export async function removeClientCalendarMapping(clientId: string) {
   await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('client_calendar_mappings').delete().eq('client_id', clientId);
   if (error) throw errorParaElCliente(error, 'removeClientCalendarMapping');
   revalidatePath(`/clientes/${clientId}`);
@@ -135,7 +135,7 @@ export async function removeClientCalendarMapping(clientId: string) {
 
 export async function saveWebhookConfig(input: { name: string; url: string; secret: string; events: string[] }) {
   await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Lista explicita en vez de esparcir `input`. Una Server Action es un endpoint HTTP y el tipo del
   // parametro se borra al compilar, asi que quien llame manda las claves que quiera: `active`, `id`,
@@ -153,7 +153,7 @@ export async function saveWebhookConfig(input: { name: string; url: string; secr
 
 export async function toggleWebhookConfig(id: string, active: boolean) {
   await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('webhook_configs').update({ active }).eq('id', id);
   if (error) throw errorParaElCliente(error, 'toggleWebhookConfig');
   revalidatePath('/ajustes');
@@ -161,7 +161,7 @@ export async function toggleWebhookConfig(id: string, active: boolean) {
 
 export async function deleteWebhookConfig(id: string) {
   await requireAgencyAdmin();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('webhook_configs').delete().eq('id', id);
   if (error) throw errorParaElCliente(error, 'deleteWebhookConfig');
   revalidatePath('/ajustes');

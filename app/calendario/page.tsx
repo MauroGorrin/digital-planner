@@ -7,13 +7,12 @@ import { adjuntoDePortada } from '@/lib/attachments';
 import type { Portada } from '@/components/TarjetaDePieza';
 import type { Attachment, Client, ContentPiece } from '@/types/database';
 
-export default async function CalendarioPage({
-  searchParams,
-}: {
-  searchParams: { view?: string; date?: string };
+export default async function CalendarioPage(props: {
+  searchParams: Promise<{ view?: string; date?: string }>;
 }) {
+  const searchParams = await props.searchParams;
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const view = searchParams.view === 'semana' ? 'semana' : 'mes';
   const anchor = searchParams.date ? new Date(searchParams.date) : new Date();

@@ -7,7 +7,7 @@ export async function POST(request: Request) {
   const { origin } = new URL(request.url);
   const form = await request.formData();
   const id = form.get('id') as string;
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.from('google_calendar_connections').delete().eq('id', id);
   return NextResponse.redirect(new URL('/ajustes', origin));
 }

@@ -14,7 +14,7 @@ function getBaseUrl() {
 }
 
 async function loadPieceWithClient(pieceId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data } = await supabase
     .from('content_pieces')
     .select('*, clients(id,name,brand_name,timezone)')
@@ -40,7 +40,7 @@ export async function createContentPiece(input: {
   assignee_id?: string;
 }) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from('content_pieces')
     // Sin `status`: la columna tiene default 'borrador' not null, y `authenticated` ya no tiene
@@ -85,7 +85,7 @@ export async function updateContentPiece(
   }>
 ) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   // Lista explícita en vez de esparcir el objeto del llamador. Una Server Action es un endpoint HTTP
   // y el `Partial<…>` de arriba se borra al compilar, así que el tipo NO es un control: quien llame
   // manda las claves que quiera, incluidas `status` y `client_id`. El privilegio de columna de
@@ -105,7 +105,7 @@ export async function updateContentPiece(
 
 export async function duplicateContentPiece(id: string) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: original } = await supabase.from('content_pieces').select('*').eq('id', id).single();
   if (!original) throw new Error('Pieza no encontrada');
   const { data, error } = await supabase
@@ -134,7 +134,7 @@ export async function duplicateContentPiece(id: string) {
 
 export async function deleteContentPiece(id: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('content_pieces').delete().eq('id', id);
   if (error) throw errorParaElCliente(error, 'deleteContentPiece');
   revalidatePath('/calendario');
@@ -142,7 +142,7 @@ export async function deleteContentPiece(id: string) {
 
 export async function rescheduleContentPiece(id: string, newScheduledAt: string) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('reschedule_content_piece', {
     p_content_piece_id: id,
     p_new_scheduled_at: newScheduledAt,
@@ -162,7 +162,7 @@ export async function rescheduleContentPiece(id: string, newScheduledAt: string)
 
 export async function submitForReview(id: string) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('submit_for_review', { p_content_piece_id: id });
   if (error) throw errorParaElCliente(error, 'submitForReview');
   const piece = await loadPieceWithClient(id);
@@ -178,7 +178,7 @@ export async function submitForReview(id: string) {
 
 export async function approvePiece(id: string, note?: string) {
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('approve_content_piece', { p_content_piece_id: id, p_note: note ?? null });
   if (error) throw errorParaElCliente(error, 'approvePiece');
   const piece = await loadPieceWithClient(id);
@@ -195,7 +195,7 @@ export async function approvePiece(id: string, note?: string) {
 
 export async function requestPieceChanges(id: string, note: string) {
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('request_changes', { p_content_piece_id: id, p_note: note });
   if (error) throw errorParaElCliente(error, 'requestPieceChanges');
   const piece = await loadPieceWithClient(id);
@@ -211,7 +211,7 @@ export async function requestPieceChanges(id: string, note: string) {
 
 export async function markPieceScheduled(id: string) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('mark_scheduled', { p_content_piece_id: id });
   if (error) throw errorParaElCliente(error, 'markPieceScheduled');
   const piece = await loadPieceWithClient(id);
@@ -227,7 +227,7 @@ export async function markPieceScheduled(id: string) {
 
 export async function markPiecePublished(id: string) {
   const profile = await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('mark_published', { p_content_piece_id: id });
   if (error) throw errorParaElCliente(error, 'markPiecePublished');
   const piece = await loadPieceWithClient(id);
@@ -242,7 +242,7 @@ export async function markPiecePublished(id: string) {
 
 export async function cancelPiece(id: string, reason: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc('cancel_content_piece', { p_content_piece_id: id, p_reason: reason });
   if (error) throw errorParaElCliente(error, 'cancelPiece');
   revalidatePath('/calendario');
@@ -256,7 +256,7 @@ export async function addComment(
   ancla?: { attachmentId: string; videoSegundo: number }
 ) {
   const profile = await requireProfile();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.from('comments').insert({
     content_piece_id: id,
     author_id: profile.id,
@@ -288,7 +288,7 @@ export async function addComment(
 
 export async function deleteAttachment(attachmentId: string, pieceId: string) {
   await requireAgency();
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data: attachment } = await supabase.from('attachments').select('file_path').eq('id', attachmentId).single();
   if (attachment) {
     await supabase.storage.from('attachments').remove([attachment.file_path]);
