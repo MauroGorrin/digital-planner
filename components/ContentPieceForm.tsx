@@ -51,6 +51,7 @@ export function ContentPieceForm({
   // Se guarda el id en cuanto la pieza existe, para que un fallo de subida posterior pueda
   // ofrecer "Ir a la pieza" en vez de dejar al usuario sin saber que ya fue creada.
   const [piezaCreada, setPiezaCreada] = useState<string | null>(null);
+  const [reintentandoVinculo, setReintentandoVinculo] = useState(false);
   const [clientId, setClientId] = useState(piece?.client_id ?? defaultClientId ?? clients[0]?.id ?? '');
   const [platform, setPlatform] = useState<PlatformType>(piece?.platform ?? ideaOrigen?.suggested_platform ?? 'instagram');
   const [contentFormat, setContentFormat] = useState<ContentFormat>(piece?.format ?? ideaOrigen?.suggested_format ?? 'post');
@@ -143,6 +144,24 @@ export function ContentPieceForm({
     } finally {
       setLoading(false);
       setProgreso(null);
+    }
+  }
+
+  // Reintenta solo el vínculo idea→pieza. Es seguro repetirlo: convert_idea_to_piece exige que la
+  // idea siga en 'aprobada', así que si el vínculo ya se había hecho (y solo se perdió la
+  // respuesta) o la idea cambió de estado por otro camino, la base de datos rechaza el reintento
+  // con un mensaje claro en vez de crear una segunda pieza o corromper el estado.
+  async function reintentarVinculo() {
+    if (!piezaCreada || !ideaOrigen) return;
+    setReintentandoVinculo(true);
+    try {
+      await vincularIdeaAPieza(ideaOrigen.id, piezaCreada);
+      router.push(`/piezas/${piezaCreada}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error al vincular la idea con la pieza.');
+    } finally {
+      setReintentandoVinculo(false);
     }
   }
 
@@ -302,13 +321,25 @@ export function ContentPieceForm({
       {error && piezaCreada && (
         <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <p>La pieza sí se creó; lo que falló fue un paso posterior (el vínculo con la idea o la subida del archivo).</p>
-          <button
-            type="button"
-            onClick={() => router.push(`/piezas/${piezaCreada}`)}
-            className="mt-1 font-medium underline"
-          >
-            Ir a la pieza para continuar desde ahí
-          </button>
+          <div className="mt-1 flex flex-wrap gap-3">
+            {ideaOrigen && (
+              <button
+                type="button"
+                onClick={reintentarVinculo}
+                disabled={reintentandoVinculo}
+                className="font-medium underline disabled:opacity-60"
+              >
+                {reintentandoVinculo ? 'Reintentando…' : 'Reintentar vínculo con la idea'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => router.push(`/piezas/${piezaCreada}`)}
+              className="font-medium underline"
+            >
+              Ir a la pieza para continuar desde ahí
+            </button>
+          </div>
         </div>
       )}
 
