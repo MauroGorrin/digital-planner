@@ -11,6 +11,7 @@ import { AttachmentUploader } from './AttachmentUploader';
 import { CommentThread } from './CommentThread';
 import { useConfirm } from './ConfirmDialog';
 import { formatDateTimeInTz } from '@/lib/tz';
+import { urlSegura } from '@/lib/url-segura';
 import {
   approvePiece,
   cancelPiece,
@@ -48,6 +49,7 @@ export function ContentPieceDetail({
   const [showCancelBox, setShowCancelBox] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isAgency = profile.role !== 'client';
+  const enlaceDeReferencia = urlSegura(piece.reference_link);
 
   function run(fn: () => Promise<void>) {
     setError(null);
@@ -122,8 +124,11 @@ export function ContentPieceDetail({
           )}
         </div>
 
-        {piece.reference_link && (
-          <a href={piece.reference_link} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
+        {/* Se valida tambien al pintar, no solo al guardar: las filas que ya estan en la base se
+            escribieron antes de que existiera la validacion, y el CHECK de 0007 entro 'not valid'
+            justo para no romper el deploy con esas filas (CN-008). */}
+        {enlaceDeReferencia && (
+          <a href={enlaceDeReferencia} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-brand-600 hover:underline">
             Ver enlace de referencia ↗
           </a>
         )}

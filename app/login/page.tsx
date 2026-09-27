@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { destinoSeguro } from '@/lib/url-segura';
 
 export default function LoginPage() {
   return (
@@ -31,7 +32,8 @@ function LoginForm() {
       setError('No pudimos iniciar sesión. Verifica tu correo y contraseña.');
       return;
     }
-    router.push(params.get('redirect') || '/');
+    // El parametro 'redirect' lo controla quien arma el enlace, no el middleware (CN-011).
+    router.push(destinoSeguro(params.get('redirect')));
     router.refresh();
   }
 

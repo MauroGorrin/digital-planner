@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { requireProfile, requireAgency } from '@/lib/auth';
 import { dispatchWebhookEvent, buildWebhookPayload } from '@/lib/webhooks/dispatch';
 import { syncPieceToGoogleCalendar } from '@/lib/google-calendar/sync';
+import { enlaceDeReferenciaValidado } from '@/lib/url-segura';
 import type { ContentFormat, ContentPiece, PlatformType } from '@/types/database';
 
 function getBaseUrl() {
@@ -44,7 +45,11 @@ export async function createContentPiece(input: {
     // Sin `status`: la columna tiene default 'borrador' not null, y `authenticated` ya no tiene
     // privilegio de insert sobre ella (0007_endurecimiento_privilegios.sql). Mandarla, aunque fuera
     // con el mismo valor del default, haría fallar el insert con un 42501.
-    .insert({ ...input, created_by: profile.id })
+    // El enlace se valida aqui y no solo en el navegador: el 'type=url' del formulario es del
+    // navegador y de todos modos acepta 'javascript:' (CN-008). El CHECK de 0007 cubre la base de
+    // datos; esta linea es la mitad de aplicacion, y lanza en espanol en vez de anular en silencio
+    // un enlace que la persona escribio.
+    .insert({ ...input, reference_link: enlaceDeReferenciaValidado(input.reference_link), created_by: profile.id })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -86,6 +91,11 @@ export async function updateContentPiece(
   // 0007_endurecimiento_privilegios.sql ya rechazaría esas dos, pero eso daría un 42501 crudo en la
   // cara del usuario en vez de ignorar en silencio un campo que nunca debió llegar.
   const limpio = Object.fromEntries(Object.entries(input).filter(([clave]) => CAMPOS_EDITABLES.includes(clave)));
+  // Mismo criterio que en createContentPiece (CN-008). Solo si la clave vino: un update parcial que
+  // no toca el enlace no debe escribir null encima del que ya estaba guardado.
+  if ('reference_link' in limpio) {
+    limpio.reference_link = enlaceDeReferenciaValidado(limpio.reference_link as string | null);
+  }
   const { error } = await supabase.from('content_pieces').update(limpio).eq('id', id);
   if (error) throw new Error(error.message);
   revalidatePath('/calendario');

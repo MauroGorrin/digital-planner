@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { requireAgency, requireProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
+import { enlaceDeReferenciaValidado } from '@/lib/url-segura';
 import type { ContentFormat, PlatformType } from '@/types/database';
 
 async function llamar(rpc: string, args: Record<string, unknown>) {
@@ -27,7 +28,9 @@ export async function crearIdea(input: {
     client_id: input.client_id,
     title: input.title,
     description: input.description,
-    reference_link: input.reference_link || null,
+    // Ver CN-008 en lib/url-segura.ts: el enlace de una idea se pinta en un href igual que el de
+    // una pieza, y lo abre el contacto del cliente en el origen de la app.
+    reference_link: enlaceDeReferenciaValidado(input.reference_link),
     suggested_platform: input.suggested_platform ?? null,
     suggested_format: input.suggested_format ?? null,
     created_by: profile.id,

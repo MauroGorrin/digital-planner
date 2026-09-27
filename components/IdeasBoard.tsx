@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Client, Idea, IdeaStatus, IdeaStatusHistoryEntry, Profile } from '@/types/database';
 import { FORMAT_LABELS, IDEA_STATUS_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { accionesDisponibles, type AccionDeIdea } from '@/lib/ideas';
+import { urlSegura } from '@/lib/url-segura';
 import {
   aprobarIdea,
   descartarIdea,
@@ -152,6 +153,7 @@ export function IdeasBoard({
               const error = errores[idea.id];
               const enCurso = pendingId === idea.id;
               const historial = historialPorIdea[idea.id] ?? [];
+              const enlaceDeReferencia = urlSegura(idea.reference_link);
 
               return (
                 <div key={idea.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 text-sm">
@@ -167,8 +169,10 @@ export function IdeasBoard({
                       {idea.suggested_format && FORMAT_LABELS[idea.suggested_format]}
                     </p>
                   )}
-                  {idea.reference_link && (
-                    <a href={idea.reference_link} target="_blank" rel="noreferrer" className="text-xs text-brand-600 underline">
+                  {/* Validado tambien al pintar; ver el comentario equivalente en
+                      ContentPieceDetail.tsx y CN-008 en lib/url-segura.ts. */}
+                  {enlaceDeReferencia && (
+                    <a href={enlaceDeReferencia} target="_blank" rel="noreferrer" className="text-xs text-brand-600 underline">
                       Ver referencia
                     </a>
                   )}

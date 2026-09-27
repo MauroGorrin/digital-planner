@@ -2,17 +2,23 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentProfile } from '@/lib/auth';
 import { FORMAT_LABELS, PLATFORM_LABELS, STATUS_LABELS } from '@/types/database';
-
-function csvEscape(value: string) {
-  if (/[",\n]/.test(value)) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
+import { csvEscape } from '@/lib/csv';
 
 export async function GET() {
   const profile = await getCurrentProfile();
   if (!profile) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+  // CN-028: la ruta comprobaba unicamente que hubiera sesion, asi que un contacto de cliente podia
+  // llamarla aunque la interfaz solo le ofrezca el boton a la agencia (PendingList.tsx). No era una
+  // fuga -- usa el cliente con RLS y content_pieces_select ya limita al cliente a su propia marca --
+  // pero la ruta se apoyaba ENTERAMENTE en la RLS mientras la interfaz insinuaba que era solo de
+  // agencia. El rol se comprueba aqui para que quien edite esto despues no herede una suposicion que
+  // el codigo nunca hizo. La RLS sigue siendo la frontera de verdad; esto es intencion explicita.
+  //
+  // Es un 403 y no un redirect (requireAgency() redirige a '/'): esta ruta devuelve un archivo, y
+  // contestar un HTML de redireccion a una peticion de descarga es un fallo confuso para un cliente
+  // de API. El caso sin sesion lo ataja el middleware antes de llegar aqui, no el 401 de arriba.
+  if (profile.role === 'client') return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
   const supabase = createClient();
   const { data: pieces } = await supabase
