@@ -19,9 +19,12 @@ const sufijo = Date.now();
 const correos = {
   agencia: `ideas-transiciones-agencia-${sufijo}@prueba.local`,
   cliente: `ideas-transiciones-cliente-${sufijo}@prueba.local`,
+  // Cuenta de agencia aparte, usada solo como autora de una idea que OTRA persona de agencia
+  // descarta -- necesaria para distinguir "notifica al autor" de "notifica a quien actua".
+  autor: `ideas-transiciones-autor-${sufijo}@prueba.local`,
 };
 
-const ids = { agencia: '', cliente: '', marca: '' };
+const ids = { agencia: '', cliente: '', autor: '', marca: '' };
 
 async function crearUsuario(email: string) {
   const { data, error } = await admin.auth.admin.createUser({
@@ -59,8 +62,10 @@ async function crearIdea(titulo: string, status: string) {
 beforeAll(async () => {
   ids.agencia = await crearUsuario(correos.agencia);
   ids.cliente = await crearUsuario(correos.cliente);
+  ids.autor = await crearUsuario(correos.autor);
   await admin.from('profiles').update({ role: 'agency_admin' }).eq('id', ids.agencia);
   await admin.from('profiles').update({ role: 'client' }).eq('id', ids.cliente);
+  await admin.from('profiles').update({ role: 'agency_member' }).eq('id', ids.autor);
 
   const { data: marca, error } = await admin
     .from('clients')
@@ -81,7 +86,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await admin.from('clients').delete().eq('id', ids.marca);
-  for (const id of [ids.agencia, ids.cliente]) {
+  for (const id of [ids.agencia, ids.cliente, ids.autor]) {
     if (id) await admin.auth.admin.deleteUser(id);
   }
 });
@@ -204,6 +209,80 @@ describe('transiciones de ideas', () => {
     const { error } = await agencia.rpc('request_idea_internal_changes', {
       p_idea_id: idea,
       p_note: 'Falta el gancho inicial',
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from('notifications')
+      .select('profile_id, idea_id, content_piece_id')
+      .eq('idea_id', idea);
+
+    expect(data).toHaveLength(1);
+    expect(data![0].profile_id).toBe(ids.agencia);
+    expect(data![0].content_piece_id).toBeNull();
+  });
+
+  it('descartar notifica al autor de la idea cuando lo descarta otra persona de agencia', async () => {
+    const { data: idea, error: errorIdea } = await admin
+      .from('ideas')
+      .insert({
+        client_id: ids.marca,
+        title: 'Descartada por otra persona',
+        description: 'Descripcion de prueba',
+        status: 'propuesta',
+        created_by: ids.autor,
+      })
+      .select('id')
+      .single();
+    if (errorIdea) throw errorIdea;
+    const agencia = await sesionDe(correos.agencia);
+
+    const { error } = await agencia.rpc('discard_idea', {
+      p_idea_id: idea!.id,
+      p_reason: 'Ya no aplica a la campaña actual',
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from('notifications')
+      .select('profile_id, idea_id, content_piece_id')
+      .eq('idea_id', idea!.id);
+
+    expect(data).toHaveLength(1);
+    expect(data![0].profile_id).toBe(ids.autor);
+    expect(data![0].content_piece_id).toBeNull();
+  });
+
+  it('descartar tu propia idea no genera ninguna notificacion', async () => {
+    const idea = await crearIdea('Descartada por su propio autor', 'propuesta');
+    // Esta idea se creo con created_by = ids.agencia (ver crearIdea), y quien la descarta aca es
+    // esa misma cuenta de agencia: sin el guard created_by <> auth.uid() esta llamada
+    // insertaria una fila igual que la prueba anterior, asi que si el guard se quitara esta
+    // prueba lo detectaria.
+    const agencia = await sesionDe(correos.agencia);
+
+    const { error } = await agencia.rpc('discard_idea', {
+      p_idea_id: idea,
+      p_reason: 'Ya no aplica, la descarto quien la propuso',
+    });
+    expect(error).toBeNull();
+
+    const { data } = await admin
+      .from('notifications')
+      .select('id')
+      .eq('idea_id', idea);
+
+    expect(data).toEqual([]);
+  });
+
+  it('un contacto del cliente que descarta una idea visible tambien notifica al autor', async () => {
+    const idea = await crearIdea('Visible y descartada por el cliente', 'pendiente_cliente');
+    // pendiente_cliente para que ideas_select deje verla al contacto de cliente.
+    const cliente = await sesionDe(correos.cliente);
+
+    const { error } = await cliente.rpc('discard_idea', {
+      p_idea_id: idea,
+      p_reason: 'El cliente prefiere no seguir con esta idea',
     });
     expect(error).toBeNull();
 

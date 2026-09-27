@@ -202,9 +202,9 @@ $$;
 
 create or replace function discard_idea(p_idea_id uuid, p_reason text)
 returns void language plpgsql security definer set search_path = public as $$
-declare v_old idea_status; v_client uuid;
+declare v_old idea_status; v_client uuid; v_created_by uuid;
 begin
-  select status, client_id into v_old, v_client from ideas where id = p_idea_id;
+  select status, client_id, created_by into v_old, v_client, v_created_by from ideas where id = p_idea_id;
   if not (
     is_agency()
     or exists (select 1 from client_contacts where client_id = v_client and profile_id = auth.uid())
@@ -218,6 +218,18 @@ begin
   update ideas set status = 'descartada' where id = p_idea_id;
   insert into idea_status_history (idea_id, from_status, to_status, changed_by, note)
     values (p_idea_id, v_old, 'descartada', auth.uid(), p_reason);
+
+  -- Se notifica solo al autor de la idea (ideas.created_by), nunca a los contactos de cliente de
+  -- la marca. Cualquiera de los dos lados puede descartar, y un contacto de cliente solo llega a
+  -- ver una idea desde 'pendiente_cliente' en adelante (ver ideas_select mas arriba): si esta
+  -- notificacion tambien avisara a esos contactos, descartar una idea todavia en 'propuesta' o
+  -- 'correccion_interna' -- que el cliente nunca debio saber que existio -- se lo revelaria por la
+  -- puerta de atras, deshaciendo exactamente el filtro que esa politica existe para sostener. El
+  -- autor si es seguro: ya sabe que la idea existe porque el la propuso.
+  if v_created_by is not null and v_created_by <> auth.uid() then
+    insert into notifications (profile_id, idea_id, type, title, body)
+      values (v_created_by, p_idea_id, 'idea_descartada', 'Descartaron tu idea', p_reason);
+  end if;
 end;
 $$;
 
