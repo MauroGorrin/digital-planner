@@ -49,7 +49,7 @@ begin
       -- CN-001: nadie se asciende a si mismo. `profiles.role` es la raiz de todo el modelo de
       -- autorizacion -- is_agency(), is_agency_admin() y has_client_access() se resuelven contra
       -- ella -- asi que una sola escritura a esta columna convierte a un contacto de cliente en
-      -- administrador de agencia con acceso a todas las marcas. Lo pone `inviteUser` con el cliente
+      -- administrador de agencia con acceso a todas las marcas. Lo pone `crearUsuario` con el cliente
       -- de servicio, que conserva el privilegio porque `service_role` no aparece en el revoke.
       ('profiles',       'update', array['role']),
 
@@ -107,7 +107,7 @@ create or replace function guard_profile_role()
 returns trigger language plpgsql set search_path = public as $$
 begin
   if new.role is distinct from old.role
-     -- `inviteUser` fija el rol con el cliente de servicio, donde auth.uid() es null y por lo tanto
+     -- `crearUsuario` fija el rol con el cliente de servicio, donde auth.uid() es null y por lo tanto
      -- is_agency_admin() es false. Sin esta lista de roles exentos, invitar a un miembro de agencia
      -- fallaria.
      and current_user not in ('service_role', 'postgres', 'supabase_admin')
@@ -137,10 +137,10 @@ create policy profiles_update_self on profiles for update
 -- ==========================================================================================
 -- `raw_user_meta_data` se rellena verbatim desde el objeto `data` del endpoint PUBLICO de signup
 -- (/auth/v1/signup, con la clave anon). Leer el rol de ahi significaba que una sola peticion HTTP
--- sin autenticar creaba un administrador de agencia. El rol se fija despues, desde `inviteUser`,
+-- sin autenticar creaba un administrador de agencia. El rol se fija despues, desde `crearUsuario`,
 -- que ya paso por requireAgencyAdmin() y escribe con el cliente de servicio.
 --
--- Este cambio y el de app/admin-actions.ts:inviteUser van juntos y no se pueden separar: si
+-- Este cambio y el de app/admin-actions.ts:crearUsuario van juntos y no se pueden separar: si
 -- cambias solo esta funcion, la invitacion deja de mandar el rol a ningun sitio y cada miembro de
 -- agencia invitado se convierte en cliente sin que nadie lo note.
 --
