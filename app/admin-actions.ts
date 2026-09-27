@@ -45,10 +45,25 @@ export async function inviteUser(input: { email: string; full_name: string; role
 
   if (!userId) {
     const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email, {
-      data: { full_name: input.full_name, role: input.role },
+      // El rol ya NO viaja aquí. Esta metadata acaba en `raw_user_meta_data`, que también rellena
+      // verbatim el endpoint público de signup, así que `handle_new_user()` dejó de leerla y crea
+      // todo perfil como 'client' (ver 0007_endurecimiento_privilegios.sql). Este cambio y el de esa
+      // migración son dos mitades de lo mismo: si mandas el rol otra vez aquí nadie lo lee, y si
+      // quitas el update de abajo cada miembro de agencia invitado queda convertido en cliente.
+      data: { full_name: input.full_name },
     });
     if (error) throw new Error(error.message);
     userId = data.user?.id;
+    if (!userId) throw new Error('No se pudo crear el usuario.');
+
+    // El rol se fija desde este camino, que ya pasó por requireAgencyAdmin(), y con el cliente de
+    // servicio, el único rol que conserva el privilegio sobre `profiles.role`.
+    //
+    // Se comprueba el error a propósito: un fallo silencioso aquí dejaría al invitado con el
+    // 'client' del default de la columna, y un miembro de agencia se encontraría sin permisos sin
+    // que nada lo reportara -- exactamente el tipo de fallo mudo que costó caro en CN-015.
+    const { error: rolError } = await admin.from('profiles').update({ role: input.role }).eq('id', userId);
+    if (rolError) throw new Error(rolError.message);
   }
   if (!userId) throw new Error('No se pudo crear el usuario.');
 

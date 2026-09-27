@@ -41,7 +41,10 @@ export async function createContentPiece(input: {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('content_pieces')
-    .insert({ ...input, created_by: profile.id, status: 'borrador' })
+    // Sin `status`: la columna tiene default 'borrador' not null, y `authenticated` ya no tiene
+    // privilegio de insert sobre ella (0007_endurecimiento_privilegios.sql). Mandarla, aunque fuera
+    // con el mismo valor del default, haría fallar el insert con un 42501.
+    .insert({ ...input, created_by: profile.id })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
@@ -49,6 +52,19 @@ export async function createContentPiece(input: {
   revalidatePath('/pendientes');
   return data.id as string;
 }
+
+// Los campos de contenido que la agencia sí edita directamente. `status` y `client_id` no están y no
+// deben estar: el estado lo mueven las RPC de transición (que dejan status_history y approvals) y la
+// marca de una pieza no cambia nunca.
+const CAMPOS_EDITABLES: string[] = [
+  'platform',
+  'format',
+  'title',
+  'copy_text',
+  'reference_link',
+  'scheduled_at',
+  'assignee_id',
+];
 
 export async function updateContentPiece(
   id: string,
@@ -64,7 +80,13 @@ export async function updateContentPiece(
 ) {
   await requireAgency();
   const supabase = createClient();
-  const { error } = await supabase.from('content_pieces').update(input).eq('id', id);
+  // Lista explícita en vez de esparcir el objeto del llamador. Una Server Action es un endpoint HTTP
+  // y el `Partial<…>` de arriba se borra al compilar, así que el tipo NO es un control: quien llame
+  // manda las claves que quiera, incluidas `status` y `client_id`. El privilegio de columna de
+  // 0007_endurecimiento_privilegios.sql ya rechazaría esas dos, pero eso daría un 42501 crudo en la
+  // cara del usuario en vez de ignorar en silencio un campo que nunca debió llegar.
+  const limpio = Object.fromEntries(Object.entries(input).filter(([clave]) => CAMPOS_EDITABLES.includes(clave)));
+  const { error } = await supabase.from('content_pieces').update(limpio).eq('id', id);
   if (error) throw new Error(error.message);
   revalidatePath('/calendario');
   revalidatePath(`/piezas/${id}`);
@@ -87,7 +109,9 @@ export async function duplicateContentPiece(id: string) {
       scheduled_at: original.scheduled_at,
       assignee_id: original.assignee_id,
       created_by: profile.id,
-      status: 'borrador',
+      // Igual que en createContentPiece: el default de la columna pone 'borrador' y mandarlo aquí
+      // fallaría con 42501. Una copia nace en borrador aunque el original estuviera aprobado, que es
+      // justo lo que hacía esta línea explícita.
       duplicated_from: id,
     })
     .select('id')
@@ -237,27 +261,16 @@ export async function addComment(
     await dispatchWebhookEvent(
       buildWebhookPayload('comentario_agregado', piece, profile.full_name, getBaseUrl(), piece.clients.brand_name, body)
     );
-    // Notifica a la contraparte (agencia <-> cliente)
-    const { data: contacts } = await supabase.from('client_contacts').select('profile_id').eq('client_id', piece.client_id);
-    const { data: assignments } = await supabase
-      .from('client_assignments')
-      .select('profile_id')
-      .eq('client_id', piece.client_id);
-    const targets =
-      profile.role === 'client'
-        ? (assignments ?? []).map((a) => a.profile_id)
-        : (contacts ?? []).map((c) => c.profile_id);
-    if (targets.length > 0) {
-      await supabase.from('notifications').insert(
-        targets.map((profile_id) => ({
-          profile_id,
-          content_piece_id: id,
-          type: 'comentario',
-          title: `Nuevo comentario de ${profile.full_name}`,
-          body: body.slice(0, 140),
-        }))
-      );
-    }
+    // Notifica a la contraparte (agencia <-> cliente). Antes esto insertaba en `notifications`
+    // directamente y sin comprobar el error: `notifications` no tiene política de INSERT, la RLS
+    // denegaba cada fila y la notificación nunca llegaba -- durante meses, sin un solo error visible
+    // (CN-015). La RPC deriva los destinatarios en el servidor; la política de INSERT no se agregó a
+    // propósito, porque dejaría a cualquier usuario fabricar notificaciones para quien quisiera.
+    const { error: notificacionError } = await supabase.rpc('notify_comment', {
+      p_content_piece_id: id,
+      p_body: body,
+    });
+    if (notificacionError) throw new Error(notificacionError.message);
   }
   revalidatePath(`/piezas/${id}`);
 }
