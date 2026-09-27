@@ -1,10 +1,15 @@
 import { fromZonedTime } from 'date-fns-tz';
 
 import type { ClientPackage, ContentFormat, ContentPiece } from '@/types/database';
+import { FORMAT_LABELS } from '@/types/database';
 
-// Mismo orden que el enum `content_format` en 0001_init.sql. Determina el orden de las
-// filas contratadas en `agregarMetricas`.
-const ORDEN_FORMATOS: ContentFormat[] = ['post', 'reel', 'historia', 'carrusel', 'video', 'otro'];
+// Orden de las filas contratadas en `agregarMetricas`. Se deriva de FORMAT_LABELS y no se
+// escribe a mano: ese Record esta tipado `Record<ContentFormat, string>`, asi que si alguien
+// agrega un valor al enum `content_format` sin agregarlo ahi, el typecheck falla. Una lista
+// literal seria `ContentFormat[]`, que acepta estar incompleta -- y un formato faltante aqui
+// desapareceria de las metricas sin error: una fila contratada que nunca se muestra.
+// El orden de claves de FORMAT_LABELS ya coincide con el del enum en 0001_init.sql:11.
+const ORDEN_FORMATOS = Object.keys(FORMAT_LABELS) as ContentFormat[];
 
 export interface LimitesDeMes {
   /** Instante UTC (ISO) en que empieza el mes en la zona horaria dada. Inclusive. */
