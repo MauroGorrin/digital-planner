@@ -205,3 +205,12 @@ export interface IdeaStatusHistoryEntry {
   created_at: string;
   changed_by_profile?: Pick<Profile, 'full_name'> | null;
 }
+
+/** Cuota mensual contratada de un formato para una marca. Clave primaria: (client_id, format). */
+export interface ClientPackage {
+  client_id: string;
+  format: ContentFormat;
+  monthly_quota: number;
+  created_at: string;
+  updated_at: string;
+}
