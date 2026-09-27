@@ -38,13 +38,15 @@ function LoginForm() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-brand-50 px-4">
+    <main className="flex min-h-screen items-center justify-center bg-[#f7f7f8] px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-8 shadow-sm ring-1 ring-slate-200">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-600 text-lg font-semibold text-white">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-ink-900 text-lg font-semibold text-white">
             P
           </div>
-          <h1 className="text-xl font-semibold text-slate-900">Planner de Contenido</h1>
+          <h1 className="text-xl font-semibold text-slate-900">
+            Planner de <span className="text-accent">Contenido</span>
+          </h1>
           <p className="mt-1 text-sm text-slate-500">Inicia sesión para ver tu calendario</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -74,7 +76,7 @@ function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-60"
+            className="w-full rounded-full bg-ink-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-60"
           >
             {loading ? 'Ingresando…' : 'Ingresar'}
           </button>

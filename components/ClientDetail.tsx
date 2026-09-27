@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { Client, Profile } from '@/types/database';
+import { BILLING_MODE_LABELS } from '@/types/database';
 import { useConfirm } from './ConfirmDialog';
 import {
   assignTeamMember,
@@ -101,9 +102,49 @@ export function ClientDetail({
           </button>
         </div>
         {client.notes && <p className="mt-3 text-sm text-slate-600">{client.notes}</p>}
-        <Link href={`/calendario?client=${client.id}`} className="mt-3 inline-block text-sm text-brand-600 hover:underline">
-          Ver calendario de este cliente →
-        </Link>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <Link href={`/calendario?client=${client.id}`} className="text-sm text-brand-600 hover:underline">
+            Ver calendario de este cliente →
+          </Link>
+          <Link href={`/metricas?client=${client.id}`} className="text-sm text-brand-600 hover:underline">
+            Ver métricas del paquete →
+          </Link>
+        </div>
+      </div>
+
+      <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+        <h2 className="mb-1 text-sm font-semibold text-slate-800">Modo de facturación</h2>
+        <p className="mb-3 text-xs text-slate-500">
+          &ldquo;Por paquete&rdquo; compara lo planificado y entregado contra una cuota mensual por formato (definida
+          en Métricas). &ldquo;Libre&rdquo; no lleva cuota: la marca puede tener tantas piezas como haga falta.
+        </p>
+        <div className="flex gap-3">
+          {(Object.entries(BILLING_MODE_LABELS) as [Client['billing_mode'], string][]).map(([modo, etiqueta]) => (
+            <button
+              key={modo}
+              type="button"
+              disabled={client.billing_mode === modo}
+              onClick={() =>
+                confirm({
+                  title: `Cambiar a "${etiqueta}"`,
+                  description:
+                    modo === 'libre'
+                      ? 'Las cuotas ya definidas para esta marca dejan de compararse en Métricas, pero no se borran.'
+                      : 'Vuelve a mostrarse la comparación contra la cuota mensual definida para esta marca.',
+                  confirmLabel: 'Cambiar',
+                  onConfirm: () => run(() => updateClientEntity(client.id, { billing_mode: modo })),
+                })
+              }
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-default ${
+                client.billing_mode === modo
+                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  : 'border-slate-300 text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              {etiqueta}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}

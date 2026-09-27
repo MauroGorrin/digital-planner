@@ -3,26 +3,64 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { requireAgency, requireAgencyAdmin } from '@/lib/auth';
-import type { UserRole } from '@/types/database';
+import type { ClientBillingMode, ContentFormat, UserRole } from '@/types/database';
 import { errorParaElCliente } from '@/lib/errores';
 import { urlDeWebhookValidada } from '@/lib/webhooks/url-valida';
 
-export async function createClientEntity(input: { name: string; brand_name: string; timezone: string; notes?: string }) {
+export async function createClientEntity(input: {
+  name: string;
+  brand_name: string;
+  timezone: string;
+  notes?: string;
+  billing_mode: ClientBillingMode;
+  quotas?: Partial<Record<ContentFormat, number>>;
+}) {
   const profile = await requireAgency();
   const supabase = await createClient();
+  const { name, brand_name, timezone, notes, billing_mode, quotas } = input;
+
   const { data, error } = await supabase
     .from('clients')
-    .insert({ ...input, created_by: profile.id })
+    .insert({ name, brand_name, timezone, notes, billing_mode, created_by: profile.id })
     .select('id')
     .single();
   if (error) throw errorParaElCliente(error, 'createClientEntity');
+  const clientId = data.id as string;
+
+  // Las cuotas se guardan en una escritura aparte a proposito: `clients` y `client_packages` son
+  // dos tablas y Supabase-js no ofrece una transaccion entre ambas desde el cliente. Si esta
+  // segunda escritura falla, la marca ya existe -- no tiene sentido tragarse el error, pero
+  // tampoco deshacer la creacion ni bloquear la navegacion a una marca que sí se creó: se devuelve
+  // como advertencia y la agencia puede definir el paquete despues desde la ficha del cliente
+  // (EditorDePaquete llama al mismo upsert).
+  let quotaWarning: string | undefined;
+  if (billing_mode === 'paquete' && quotas) {
+    const filas = Object.entries(quotas)
+      .filter(([, cantidad]) => typeof cantidad === 'number' && Number.isInteger(cantidad) && cantidad > 0)
+      .map(([format, monthly_quota]) => ({ client_id: clientId, format: format as ContentFormat, monthly_quota }));
+
+    if (filas.length > 0) {
+      const { error: errorPaquete } = await supabase.from('client_packages').insert(filas);
+      if (errorPaquete) {
+        quotaWarning = `El cliente se creó, pero no se pudieron guardar sus cuotas: ${errorParaElCliente(errorPaquete, 'createClientEntity:quotas').message} Puedes definirlas desde la ficha del cliente.`;
+      }
+    }
+  }
+
   revalidatePath('/clientes');
-  return data.id as string;
+  return { id: clientId, quotaWarning };
 }
 
 export async function updateClientEntity(
   id: string,
-  input: Partial<{ name: string; brand_name: string; timezone: string; notes: string; archived: boolean }>
+  input: Partial<{
+    name: string;
+    brand_name: string;
+    timezone: string;
+    notes: string;
+    archived: boolean;
+    billing_mode: ClientBillingMode;
+  }>
 ) {
   await requireAgency();
   const supabase = await createClient();

@@ -15,7 +15,12 @@ export default async function ClientesPage() {
   return (
     <AppShell profile={profile}>
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-slate-900">Clientes</h1>
+        <div>
+          <p className="eyebrow mb-1">Agencia</p>
+          <h1 className="text-xl font-semibold text-slate-900">
+            Tus <span className="text-accent">clientes</span>
+          </h1>
+        </div>
         <Link href="/clientes/nuevo" className="btn-primary">
           + Nuevo cliente
         </Link>

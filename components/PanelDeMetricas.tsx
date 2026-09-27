@@ -1,5 +1,5 @@
 import type { FilaDeMetrica } from '@/lib/metricas';
-import type { ClientPackage } from '@/types/database';
+import type { ClientBillingMode, ClientPackage } from '@/types/database';
 import { FORMAT_LABELS } from '@/types/database';
 import { EditorDePaquete } from './EditorDePaquete';
 
@@ -36,6 +36,7 @@ export function PanelDeMetricas({
   brands,
   selectedClientId,
   clientName,
+  billingMode,
   anio,
   mes,
   filas,
@@ -45,22 +46,30 @@ export function PanelDeMetricas({
   brands: MarcaOpcion[];
   selectedClientId: string;
   clientName: string;
+  billingMode: ClientBillingMode;
   anio: number;
   mes: number;
   filas: FilaDeMetrica[];
   paquete: Pick<ClientPackage, 'format' | 'monthly_quota'>[];
 }) {
   const esAgencia = role === 'agency';
+  const esLibre = billingMode === 'libre';
   // El cliente no elige su marca -- la resuelve la página desde client_contacts. Pero si por
   // error de datos fuera contacto de más de una, no le adivinamos cuál: se le ofrece el mismo
   // selector, limitado a esas marcas (spec, sección "Dónde se ve").
   const mostrarSelectorDeMarca = esAgencia || brands.length > 1;
-  const sinPaquete = paquete.length === 0;
+  // Una marca "libre" nunca esta "sin paquete definido": no lleva paquete a proposito, y no es lo
+  // mismo que la agencia todavia no haya llegado a configurarlo. Ese aviso solo tiene sentido
+  // cuando la marca SI trabaja por paquete y aun asi no tiene cuotas cargadas.
+  const sinPaquete = !esLibre && paquete.length === 0;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-slate-900">Métricas del paquete — {clientName}</h1>
+        <p className="eyebrow mb-1">{clientName}</p>
+        <h1 className="text-xl font-semibold text-slate-900">
+          Métricas del <span className="text-accent">paquete</span>
+        </h1>
         <p className="text-sm text-slate-500">
           {MESES[mes - 1]} {anio}
         </p>
@@ -74,6 +83,13 @@ export function PanelDeMetricas({
         mes={mes}
       />
 
+      {esLibre && (
+        <p className="rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-600">
+          Esta marca trabaja en modo libre: no tiene cuota mensual, así que aquí solo se cuenta lo planificado y
+          entregado, sin comparar contra un límite.
+        </p>
+      )}
+
       {sinPaquete && (
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <span>Esta marca todavía no tiene un paquete mensual definido.</span>
@@ -83,7 +99,7 @@ export function PanelDeMetricas({
 
       {filas.length > 0 && <TablaDeMetricas filas={filas} />}
 
-      {esAgencia && <EditorDePaquete clientId={selectedClientId} paquete={paquete} />}
+      {esAgencia && !esLibre && <EditorDePaquete clientId={selectedClientId} paquete={paquete} />}
     </div>
   );
 }

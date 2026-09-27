@@ -31,7 +31,7 @@ export function useConfirm() {
         <div className="mt-5 flex justify-end gap-2">
           <button
             onClick={() => setState(null)}
-            className="rounded-lg px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
+            className="rounded-full px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
             Cancelar
           </button>
@@ -40,8 +40,8 @@ export function useConfirm() {
               state.onConfirm();
               setState(null);
             }}
-            className={`rounded-lg px-3.5 py-2 text-sm font-semibold text-white ${
-              state.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-brand-600 hover:bg-brand-700'
+            className={`rounded-full px-3.5 py-2 text-sm font-semibold text-white transition ${
+              state.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-ink-900 hover:bg-ink-800'
             }`}
           >
             {state.confirmLabel}

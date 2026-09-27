@@ -30,6 +30,7 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
         brands={[MARCA_UNO]}
         selectedClientId={MARCA_UNO.id}
         clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
         anio={2026}
         mes={9}
         filas={filas}
@@ -51,6 +52,7 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
         brands={[MARCA_UNO]}
         selectedClientId={MARCA_UNO.id}
         clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
         anio={2026}
         mes={9}
         filas={filas}
@@ -75,6 +77,7 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
         brands={[MARCA_UNO]}
         selectedClientId={MARCA_UNO.id}
         clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
         anio={2026}
         mes={9}
         filas={filas}
@@ -99,6 +102,7 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
         brands={[MARCA_UNO]}
         selectedClientId={MARCA_UNO.id}
         clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
         anio={2026}
         mes={9}
         filas={[]}
@@ -109,5 +113,27 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
     expect(screen.getByText('Esta marca todavía no tiene un paquete mensual definido.')).toBeInTheDocument();
     expect(screen.getByText(/Usa el editor de abajo para definirlo\./)).toBeInTheDocument();
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('una marca libre no muestra el aviso de "paquete sin definir" ni el editor de cuotas', () => {
+    const filas: FilaDeMetrica[] = [{ format: 'post', contratado: null, planificado: 5, entregado: 3 }];
+
+    render(
+      <PanelDeMetricas
+        role="agency"
+        brands={[MARCA_UNO]}
+        selectedClientId={MARCA_UNO.id}
+        clientName={MARCA_UNO.brand_name}
+        billingMode="libre"
+        anio={2026}
+        mes={9}
+        filas={filas}
+        paquete={[]}
+      />
+    );
+
+    expect(screen.queryByText('Esta marca todavía no tiene un paquete mensual definido.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Editar el paquete de esta marca')).not.toBeInTheDocument();
+    expect(screen.getByText(/trabaja en modo libre/)).toBeInTheDocument();
   });
 });

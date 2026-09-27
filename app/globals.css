@@ -11,8 +11,8 @@ html, body {
 }
 
 body {
-  background-color: #f6f7fb;
-  color: #1f2937;
+  background-color: #f7f7f8;
+  color: #18181d;
 }
 
 * {
@@ -32,10 +32,23 @@ body {
   @apply rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-600 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100;
 }
 
+/* CTA principal: negro, pill, sin sombra — el acento de color vive en enlaces y detalles, no
+   en el botón de acción. */
 .btn-primary {
-  @apply rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60;
+  @apply rounded-full bg-ink-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-ink-800 disabled:opacity-60;
 }
 
 .btn-secondary {
-  @apply rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50;
+  @apply rounded-full border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50;
+}
+
+/* Palabra clave en itálica serif dentro de un título — usar en un span suelto, no en el
+   bloque de texto completo. */
+.text-accent {
+  @apply font-accent italic;
+}
+
+/* Eyebrow: rótulo chico en mayúsculas arriba de un título de sección. */
+.eyebrow {
+  @apply text-xs font-semibold uppercase tracking-wide text-slate-400;
 }

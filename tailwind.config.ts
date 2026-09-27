@@ -5,17 +5,36 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Acento violeta-índigo: enlaces, focus rings, estados seleccionados, barras de
+        // progreso. Reemplaza el azul genérico anterior — como `brand-*` ya era el token
+        // central en ~20 componentes (CalendarBoard, IdeasBoard, ContentPieceForm,
+        // PanelDeMetricas, AppShell...), este único cambio re-pinta toda la app sin tocar
+        // esos archivos uno por uno.
         brand: {
-          50: '#f2f6fb',
-          100: '#e2eaf6',
-          200: '#c2d5ec',
-          300: '#93b5db',
-          400: '#5c8ec5',
-          500: '#3970ab',
-          600: '#2a578c',
-          700: '#234771',
-          800: '#213c5e',
-          900: '#1f3450',
+          50: '#f5f3ff',
+          100: '#ede9fe',
+          200: '#ddd6fe',
+          300: '#c4b5fd',
+          400: '#a78bfa',
+          500: '#8b5cf6',
+          600: '#7c3aed',
+          700: '#6d28d9',
+          800: '#5b21b6',
+          900: '#4c1d95',
+        },
+        // Grafito/negro para los CTA principales (`.btn-primary`, logo, secciones oscuras de
+        // impacto) — el acento no vive en el botón principal, vive en enlaces y detalles.
+        ink: {
+          50: '#f7f7f8',
+          100: '#eeeef0',
+          200: '#d9d9de',
+          300: '#b3b3bd',
+          400: '#82828f',
+          500: '#565660',
+          600: '#3a3a42',
+          700: '#26262c',
+          800: '#18181d',
+          900: '#0a0a0f',
         },
         state: {
           draft: '#94a3b8',
@@ -26,6 +45,11 @@ const config: Config = {
           published: '#16a34a',
           cancelled: '#71717a',
         },
+      },
+      fontFamily: {
+        sans: ['var(--font-sans)', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Itálica serif de acento para palabras clave en títulos, no para texto de cuerpo.
+        accent: ['var(--font-accent)', 'ui-serif', 'Georgia', 'serif'],
       },
     },
   },

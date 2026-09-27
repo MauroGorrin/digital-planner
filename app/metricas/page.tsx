@@ -3,9 +3,9 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { PanelDeMetricas, type MarcaOpcion } from '@/components/PanelDeMetricas';
 import { agregarMetricas, limitesDelMes, mesActualEn } from '@/lib/metricas';
-import type { Client, ClientPackage, ContentPiece } from '@/types/database';
+import type { Client, ClientBillingMode, ClientPackage, ContentPiece } from '@/types/database';
 
-type MarcaConTz = MarcaOpcion & { timezone: string };
+type MarcaConTz = MarcaOpcion & { timezone: string; billing_mode: ClientBillingMode };
 
 export default async function MetricasPage(props: {
   searchParams: Promise<{ client?: string; anio?: string; mes?: string }>;
@@ -25,19 +25,20 @@ export default async function MetricasPage(props: {
   if (esAgencia) {
     const { data } = await supabase
       .from('clients')
-      .select('id,name,brand_name,timezone')
+      .select('id,name,brand_name,timezone,billing_mode')
       .eq('archived', false)
       .order('name');
-    marcas = ((data ?? []) as Pick<Client, 'id' | 'name' | 'brand_name' | 'timezone'>[]).map((c) => ({
+    marcas = ((data ?? []) as Pick<Client, 'id' | 'name' | 'brand_name' | 'timezone' | 'billing_mode'>[]).map((c) => ({
       id: c.id,
       name: c.name,
       brand_name: c.brand_name,
       timezone: c.timezone,
+      billing_mode: c.billing_mode,
     }));
   } else {
     const { data } = await supabase
       .from('client_contacts')
-      .select('clients(id,name,brand_name,timezone)')
+      .select('clients(id,name,brand_name,timezone,billing_mode)')
       .eq('profile_id', profile.id);
     marcas = ((data ?? []) as unknown as { clients: MarcaConTz | null }[])
       .map((fila) => fila.clients)
@@ -92,6 +93,7 @@ export default async function MetricasPage(props: {
         brands={marcas}
         selectedClientId={marcaSeleccionada.id}
         clientName={marcaSeleccionada.brand_name}
+        billingMode={marcaSeleccionada.billing_mode}
         anio={anio}
         mes={mes}
         filas={filas}

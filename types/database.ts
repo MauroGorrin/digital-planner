@@ -82,6 +82,13 @@ export interface Profile {
   created_at: string;
 }
 
+export type ClientBillingMode = 'paquete' | 'libre';
+
+export const BILLING_MODE_LABELS: Record<ClientBillingMode, string> = {
+  paquete: 'Por paquete',
+  libre: 'Libre (sin cuota)',
+};
+
 export interface Client {
   id: string;
   name: string;
@@ -90,6 +97,7 @@ export interface Client {
   logo_url: string | null;
   notes: string | null;
   archived: boolean;
+  billing_mode: ClientBillingMode;
   created_by: string | null;
   created_at: string;
 }
