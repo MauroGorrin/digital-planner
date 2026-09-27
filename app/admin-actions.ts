@@ -6,6 +6,7 @@ import { requireAgency, requireAgencyAdmin } from '@/lib/auth';
 import type { ClientBillingMode, ContentFormat, UserRole } from '@/types/database';
 import { errorParaElCliente } from '@/lib/errores';
 import { urlDeWebhookValidada } from '@/lib/webhooks/url-valida';
+import { generarClave } from '@/lib/clave';
 
 export async function createClientEntity(input: {
   name: string;
@@ -77,50 +78,95 @@ export async function updateClientEntity(
   revalidatePath(`/clientes/${id}`);
 }
 
+export interface ResultadoDeCrearUsuario {
+  userId: string;
+  /**
+   * La clave generada, **solo** cuando la cuenta se acaba de crear. No viene cuando `yaExistia`.
+   * Es la única vez que existe: no se guarda en ninguna columna ni se registra en ningún log, así
+   * que quien llama tiene que mostrarla en ese mismo momento. Si se pierde, el arreglo es crear
+   * otra clave, no recuperar esta.
+   */
+  clave?: string;
+  /** true si ya había un perfil con ese correo: no se creó nada y no se tocó su clave. */
+  yaExistia: boolean;
+}
+
 /**
- * Invita a una persona por correo (equipo de agencia o contacto de cliente).
- * Usa el service role para crear el usuario en Supabase Auth; requiere SMTP configurado
- * en el proyecto Supabase para que el correo de invitación se envíe.
+ * Crea la cuenta de una persona (equipo de agencia o contacto de cliente) con una clave generada,
+ * y la devuelve una sola vez para que la agencia se la entregue por su cuenta.
+ *
+ * Antes esto invitaba por correo con `inviteUserByEmail`, que necesita SMTP configurado en el
+ * proyecto Supabase. En el plan gratuito no hay SMTP propio: el correo no llegaba o el envío
+ * quedaba limitado a unos pocos por hora, y el alta real terminaba haciéndose a mano en el panel.
+ * De ahí el cambio de mecanismo -- y el cambio de nombre: esto ya no invita a nada.
  */
-export async function inviteUser(input: { email: string; full_name: string; role: UserRole; client_id?: string }) {
+export async function crearUsuario(input: {
+  email: string;
+  full_name: string;
+  role: UserRole;
+  client_id?: string;
+}): Promise<ResultadoDeCrearUsuario> {
   await requireAgencyAdmin();
   const admin = createServiceClient();
 
   const { data: existing } = await admin.from('profiles').select('id').eq('email', input.email).maybeSingle();
+  const existente = existing?.id as string | undefined;
 
-  let userId = existing?.id as string | undefined;
-
-  if (!userId) {
-    const { data, error } = await admin.auth.admin.inviteUserByEmail(input.email, {
-      // El rol ya NO viaja aquí. Esta metadata acaba en `raw_user_meta_data`, que también rellena
-      // verbatim el endpoint público de signup, así que `handle_new_user()` dejó de leerla y crea
-      // todo perfil como 'client' (ver 0007_endurecimiento_privilegios.sql). Este cambio y el de esa
-      // migración son dos mitades de lo mismo: si mandas el rol otra vez aquí nadie lo lee, y si
-      // quitas el update de abajo cada miembro de agencia invitado queda convertido en cliente.
-      data: { full_name: input.full_name },
-    });
-    if (error) throw errorParaElCliente(error, 'inviteUser');
-    userId = data.user?.id;
-    if (!userId) throw new Error('No se pudo crear el usuario.');
-
-    // El rol se fija desde este camino, que ya pasó por requireAgencyAdmin(), y con el cliente de
-    // servicio, el único rol que conserva el privilegio sobre `profiles.role`.
-    //
-    // Se comprueba el error a propósito: un fallo silencioso aquí dejaría al invitado con el
-    // 'client' del default de la columna, y un miembro de agencia se encontraría sin permisos sin
-    // que nada lo reportara -- exactamente el tipo de fallo mudo que costó caro en CN-015.
-    const { error: rolError } = await admin.from('profiles').update({ role: input.role }).eq('id', userId);
-    if (rolError) throw errorParaElCliente(rolError, 'inviteUser');
+  // Cuenta que ya existe: se vincula a la marca y nada más. **No se le toca la clave.**
+  // Reescribir la clave de alguien porque un administrador volvió a teclear su correo -- para
+  // añadirlo a una segunda marca, por ejemplo -- lo dejaría fuera de su cuenta sin que ni él ni
+  // quien lo hizo entendieran por qué. Quien llama lo distingue por `yaExistia` y no recibe clave.
+  if (existente) {
+    await vincularAMarca(admin, input, existente);
+    revalidatePath(`/clientes/${input.client_id ?? ''}`);
+    return { userId: existente, yaExistia: true };
   }
+
+  const clave = generarClave();
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email: input.email,
+    password: clave,
+    // `email_confirm: true` marca el correo como confirmado al crear. El proyecto tiene activada
+    // la confirmación de correo y no tiene SMTP, así que sin esto la cuenta nace creada pero sin
+    // poder iniciar sesión nunca -- y no hay correo de confirmación que la rescate.
+    email_confirm: true,
+    // El rol ya NO viaja aquí. Esta metadata acaba en `raw_user_meta_data`, que también rellena
+    // verbatim el endpoint público de signup, así que `handle_new_user()` dejó de leerla y crea
+    // todo perfil como 'client' (ver 0007_endurecimiento_privilegios.sql). Este cambio y el de esa
+    // migración son dos mitades de lo mismo: si mandas el rol otra vez aquí nadie lo lee, y si
+    // quitas el update de abajo cada miembro de agencia creado queda convertido en cliente.
+    user_metadata: { full_name: input.full_name },
+  });
+  if (error) throw errorParaElCliente(error, 'crearUsuario');
+  const userId = data.user?.id;
   if (!userId) throw new Error('No se pudo crear el usuario.');
 
-  if (input.client_id) {
-    const table = input.role === 'client' ? 'client_contacts' : 'client_assignments';
-    await admin.from(table).upsert({ client_id: input.client_id, profile_id: userId }, { onConflict: 'client_id,profile_id' });
-  }
+  // El rol se fija desde este camino, que ya pasó por requireAgencyAdmin(), y con el cliente de
+  // servicio, el único rol que conserva el privilegio sobre `profiles.role`.
+  //
+  // Se comprueba el error a propósito: un fallo silencioso aquí dejaría a la persona con el
+  // 'client' del default de la columna, y un miembro de agencia se encontraría sin permisos sin
+  // que nada lo reportara -- exactamente el tipo de fallo mudo que costó caro en CN-015.
+  const { error: rolError } = await admin.from('profiles').update({ role: input.role }).eq('id', userId);
+  if (rolError) throw errorParaElCliente(rolError, 'crearUsuario');
+
+  await vincularAMarca(admin, input, userId);
 
   revalidatePath(`/clientes/${input.client_id ?? ''}`);
-  return userId;
+  // La clave sale de aquí y de ningún otro sitio: no se escribe en una columna ni en un console.*.
+  return { userId, clave, yaExistia: false };
+}
+
+/** Vincula el perfil a la marca: contacto si es cliente, asignación si es de la agencia. */
+async function vincularAMarca(
+  admin: ReturnType<typeof createServiceClient>,
+  input: { role: UserRole; client_id?: string },
+  profileId: string
+) {
+  if (!input.client_id) return;
+  const table = input.role === 'client' ? 'client_contacts' : 'client_assignments';
+  await admin.from(table).upsert({ client_id: input.client_id, profile_id: profileId }, { onConflict: 'client_id,profile_id' });
 }
 
 export async function removeClientContact(clientId: string, profileId: string) {

@@ -26,7 +26,7 @@ Aplicación web responsive para que una agencia de marketing y sus clientes plan
      discrepancia entre ambos. Si en el futuro se mejora el plan de Supabase y se sube el límite
      global desde el panel, hay que subir también el número en los tres lugares donde vive (ver
      abajo).
-3. En **Authentication > Providers**, deja activado el login por correo/contraseña. Para que las invitaciones envíen correo, configura un proveedor SMTP en **Authentication > Email Templates / SMTP Settings** (si no configuras SMTP, el usuario se crea igualmente pero deberás compartirle el enlace de invitación o restablecer su contraseña manualmente desde el panel de Supabase).
+3. En **Authentication > Providers**, deja activado el login por correo/contraseña. No hace falta SMTP: el alta no manda correo. Un administrador de agencia crea cada cuenta desde el propio planner (Ajustes para el equipo, la ficha de la marca para un contacto), el planner genera la clave y la muestra una sola vez para que se la entregues a la persona por el medio que uses normalmente.
 4. Crea al primer administrador manualmente: en **Authentication > Users**, crea un usuario con su correo, y en la tabla `profiles` (se crea automáticamente) actualiza su `role` a `agency_admin`:
    ```sql
    update profiles set role = 'agency_admin' where email = 'tu-correo@agencia.com';
@@ -112,7 +112,7 @@ Abre `http://localhost:3000`, inicia sesión con el administrador creado en el p
 | Acción | Administrador | Equipo agencia | Cliente |
 |---|---|---|---|
 | Crear/editar clientes | ✅ | ✅ | ❌ |
-| Invitar equipo/contactos | ✅ | ❌ | ❌ |
+| Crear cuentas de equipo/contactos | ✅ | ❌ | ❌ |
 | Crear/editar/duplicar/eliminar piezas | ✅ | ✅ | ❌ |
 | Ver calendario de todos los clientes | ✅ | ✅ | Solo el suyo |
 | Aprobar / solicitar cambios | ❌ | ❌ | ✅ |

@@ -117,7 +117,8 @@ existente en `.gitignore`.
 5. Nunca marques una tarea terminada con el gate de comandos en rojo.
 6. Nunca commitees `.env`, `.env.local` ni ningún archivo con secretos reales.
 7. Nunca habilites el registro público (`enable_signup`) — ni en `supabase/config.toml` ni en el
-   panel de Supabase. El alta es solo por invitación, vía `inviteUser` con el service role. Con el
+   panel de Supabase. El alta la hace solo un administrador de agencia, vía `crearUsuario` con el
+   service role, que crea la cuenta con una clave generada y la muestra una sola vez. Con el
    registro abierto, `/auth/v1/signup` es un endpoint público que crea perfiles, y el rol de un
    perfil decide toda la autorización del producto.
 8. Nunca cambies `profiles.role`, `content_pieces.status`, `ideas.status` ni el `client_id` de una

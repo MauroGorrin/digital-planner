@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Profile } from '@/types/database';
-import { inviteUser } from '@/app/admin-actions';
+import { crearUsuario } from '@/app/admin-actions';
+import { PanelDeCuentaCreada, type CuentaCreada } from './PanelDeCuentaCreada';
 
 export function TeamInvite({ team }: { team: Profile[] }) {
   const router = useRouter();
@@ -11,19 +12,25 @@ export function TeamInvite({ team }: { team: Profile[] }) {
   const [fullName, setFullName] = useState('');
   const [role, setRole] = useState<'agency_admin' | 'agency_member'>('agency_member');
   const [error, setError] = useState<string | null>(null);
+  const [cuenta, setCuenta] = useState<CuentaCreada | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    // El panel de la creación anterior se limpia al empezar esta, no al terminarla: si se dejara,
+    // durante el envío se estaría mostrando la clave de otra persona junto al formulario de esta.
+    setCuenta(null);
+    const correo = email;
     startTransition(async () => {
       try {
-        await inviteUser({ email, full_name: fullName, role });
+        const resultado = await crearUsuario({ email: correo, full_name: fullName, role });
+        setCuenta({ email: correo, clave: resultado.clave, yaExistia: resultado.yaExistia });
         setEmail('');
         setFullName('');
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'No se pudo invitar.');
+        setError(err instanceof Error ? err.message : 'No se pudo crear la cuenta.');
       }
     });
   }
@@ -59,10 +66,15 @@ export function TeamInvite({ team }: { team: Profile[] }) {
           <option value="agency_admin">Administrador</option>
         </select>
         <button type="submit" disabled={isPending} className="btn-primary whitespace-nowrap">
-          Invitar
+          Crear cuenta
         </button>
       </form>
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+      {cuenta && (
+        <div className="mt-3">
+          <PanelDeCuentaCreada cuenta={cuenta} onCerrar={() => setCuenta(null)} />
+        </div>
+      )}
     </div>
   );
 }

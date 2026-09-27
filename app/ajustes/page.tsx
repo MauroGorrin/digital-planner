@@ -43,7 +43,7 @@ export default async function AjustesPage(props: { searchParams: Promise<{ error
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="mb-1 text-sm font-semibold text-slate-800">Equipo de la agencia</h2>
-          <p className="mb-3 text-xs text-slate-500">Invita a nuevos miembros del equipo por correo.</p>
+          <p className="mb-3 text-xs text-slate-500">Crea la cuenta de un nuevo miembro del equipo. La clave se muestra una sola vez, al crearla.</p>
           <TeamInvite team={(team ?? []) as Profile[]} />
         </section>
 

@@ -6,9 +6,10 @@ import Link from 'next/link';
 import type { Client, Profile } from '@/types/database';
 import { BILLING_MODE_LABELS } from '@/types/database';
 import { useConfirm } from './ConfirmDialog';
+import { PanelDeCuentaCreada, type CuentaCreada } from './PanelDeCuentaCreada';
 import {
   assignTeamMember,
-  inviteUser,
+  crearUsuario,
   removeClientContact,
   removeTeamAssignment,
   updateClientEntity,
@@ -49,6 +50,7 @@ export function ClientDetail({
   const [contactEmail, setContactEmail] = useState('');
   const [contactName, setContactName] = useState('');
   const [teamPick, setTeamPick] = useState(team[0]?.id ?? '');
+  const [cuentaCreada, setCuentaCreada] = useState<CuentaCreada | null>(null);
 
   const [emailPending, setEmailPending] = useState(notificationSettings?.email_on_pending_review ?? true);
   const [emailResponse, setEmailResponse] = useState(notificationSettings?.email_on_client_response ?? true);
@@ -189,7 +191,7 @@ export function ClientDetail({
       <div className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
         <h2 className="mb-3 text-sm font-semibold text-slate-800">Contactos del cliente</h2>
         <ul className="mb-3 space-y-1.5">
-          {contacts.length === 0 && <p className="text-sm text-slate-400">Sin contactos invitados todavía.</p>}
+          {contacts.length === 0 && <p className="text-sm text-slate-400">Sin contactos todavía.</p>}
           {contacts.map((c) => (
             <li key={c.profile_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
               <span>
@@ -205,8 +207,19 @@ export function ClientDetail({
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              // El panel de la creación anterior se limpia al empezar esta, no al terminarla: si se
+              // dejara, durante el envío se estaría mostrando la clave de otra persona junto al
+              // formulario de esta.
+              setCuentaCreada(null);
+              const correo = contactEmail;
               run(async () => {
-                await inviteUser({ email: contactEmail, full_name: contactName, role: 'client', client_id: client.id });
+                const resultado = await crearUsuario({
+                  email: correo,
+                  full_name: contactName,
+                  role: 'client',
+                  client_id: client.id,
+                });
+                setCuentaCreada({ email: correo, clave: resultado.clave, yaExistia: resultado.yaExistia });
                 setContactEmail('');
                 setContactName('');
               });
@@ -229,11 +242,16 @@ export function ClientDetail({
               className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
             <button type="submit" disabled={isPending} className="btn-primary whitespace-nowrap">
-              Invitar contacto
+              Crear cuenta
             </button>
           </form>
         ) : (
-          <p className="text-sm text-slate-400">Solo un administrador puede invitar contactos.</p>
+          <p className="text-sm text-slate-400">Solo un administrador puede crear cuentas de contacto.</p>
+        )}
+        {cuentaCreada && (
+          <div className="mt-3">
+            <PanelDeCuentaCreada cuenta={cuentaCreada} onCerrar={() => setCuentaCreada(null)} />
+          </div>
         )}
       </div>
 
