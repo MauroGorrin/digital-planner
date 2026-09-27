@@ -32,7 +32,7 @@ export async function createClientEntity(input: {
   // segunda escritura falla, la marca ya existe -- no tiene sentido tragarse el error, pero
   // tampoco deshacer la creacion ni bloquear la navegacion a una marca que sí se creó: se devuelve
   // como advertencia y la agencia puede definir el paquete despues desde la ficha del cliente
-  // (EditorDePaquete llama al mismo upsert).
+  // (EditorDePaquete guarda cada cuota por su cuenta, con upsert).
   let quotaWarning: string | undefined;
   if (billing_mode === 'paquete' && quotas) {
     const filas = Object.entries(quotas)
@@ -64,7 +64,14 @@ export async function updateClientEntity(
 ) {
   await requireAgency();
   const supabase = await createClient();
-  const { error } = await supabase.from('clients').update(input).eq('id', id);
+  // Allowlist explicito en vez de update(input): una Server Action es un endpoint HTTP y el
+  // Partial<...> de TypeScript se borra en runtime, asi que el objeto que llega puede traer
+  // cualquier clave. Mismo criterio que ya aplica updateContentPiece en app/actions.ts.
+  const CAMPOS = ['name', 'brand_name', 'timezone', 'notes', 'archived', 'billing_mode'] as const;
+  const limpio = Object.fromEntries(
+    Object.entries(input).filter(([clave]) => (CAMPOS as readonly string[]).includes(clave))
+  );
+  const { error } = await supabase.from('clients').update(limpio).eq('id', id);
   if (error) throw errorParaElCliente(error, 'updateClientEntity');
   revalidatePath('/clientes');
   revalidatePath(`/clientes/${id}`);

@@ -30,7 +30,7 @@ export function AppShell({ profile, children }: { profile: Profile; children: Re
             <Link href="/calendario" className="flex items-center gap-2 font-semibold text-slate-900">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-900 text-sm text-white">P</span>
               <span className="hidden sm:inline">
-                Planner de <span className="text-accent">Contenido</span>
+                Planner de <span className="title-accent">Contenido</span>
               </span>
             </Link>
             <nav className="hidden gap-1 md:flex">

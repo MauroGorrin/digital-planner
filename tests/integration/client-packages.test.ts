@@ -213,3 +213,55 @@ describe('el check de la cuota', () => {
     expect(error?.message).toMatch(/client_packages_monthly_quota_check/);
   });
 });
+
+describe('modo de facturacion de una marca', () => {
+  it('una marca creada sin billing_mode nace en "paquete", no en "libre"', async () => {
+    // Es la garantia de que 0008 no cambia el comportamiento de las marcas que ya existian: todas
+    // asumian paquete (con o sin cuotas cargadas), y el default de la columna las deja igual. Si
+    // el default fuera 'libre', a toda marca vieja le desapareceria de golpe la comparacion
+    // contra su cuota y el aviso de "paquete sin definir", sin que nadie tocara nada.
+    const { data, error } = await admin
+      .from('clients')
+      .insert({
+        name: `Marca sin modo ${sufijo}`,
+        brand_name: 'Sin modo',
+        timezone: 'America/Mexico_City',
+        created_by: ids.agencia,
+      })
+      .select('id, billing_mode')
+      .single();
+    if (error) throw error;
+
+    expect(data.billing_mode).toBe('paquete');
+
+    await admin.from('clients').delete().eq('id', data.id);
+  });
+
+  it('acepta "libre" y rechaza cualquier otro valor del enum', async () => {
+    const { data, error } = await admin
+      .from('clients')
+      .insert({
+        name: `Marca libre ${sufijo}`,
+        brand_name: 'Libre',
+        timezone: 'America/Mexico_City',
+        billing_mode: 'libre',
+        created_by: ids.agencia,
+      })
+      .select('id, billing_mode')
+      .single();
+    if (error) throw error;
+    expect(data.billing_mode).toBe('libre');
+    await admin.from('clients').delete().eq('id', data.id);
+
+    const { error: errorInvalido } = await admin.from('clients').insert({
+      name: `Marca invalida ${sufijo}`,
+      brand_name: 'Invalida',
+      timezone: 'America/Mexico_City',
+      billing_mode: 'mensual',
+      created_by: ids.agencia,
+    });
+    // 22P02 = invalid_text_representation: el valor no pertenece al enum client_billing_mode.
+    expect(errorInvalido?.code).toBe('22P02');
+    expect(errorInvalido?.message).toMatch(/client_billing_mode/);
+  });
+});

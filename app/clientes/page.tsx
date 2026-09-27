@@ -18,7 +18,7 @@ export default async function ClientesPage() {
         <div>
           <p className="eyebrow mb-1">Agencia</p>
           <h1 className="text-xl font-semibold text-slate-900">
-            Tus <span className="text-accent">clientes</span>
+            Tus <span className="title-accent">clientes</span>
           </h1>
         </div>
         <Link href="/clientes/nuevo" className="btn-primary">

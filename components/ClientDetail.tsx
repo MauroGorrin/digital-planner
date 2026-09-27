@@ -118,13 +118,19 @@ export function ClientDetail({
           &ldquo;Por paquete&rdquo; compara lo planificado y entregado contra una cuota mensual por formato (definida
           en Métricas). &ldquo;Libre&rdquo; no lleva cuota: la marca puede tener tantas piezas como haga falta.
         </p>
-        <div className="flex gap-3">
+        {/* radiogroup con aria-checked en vez de `disabled` para marcar la opcion activa: un
+            lector de pantalla anuncia un control deshabilitado como "no disponible", no como
+            "seleccionado", y ademas sale del orden de tabulacion -- con teclado no habia forma
+            de saber que modo estaba puesto. */}
+        <div className="flex gap-3" role="radiogroup" aria-label="Modo de facturacion">
           {(Object.entries(BILLING_MODE_LABELS) as [Client['billing_mode'], string][]).map(([modo, etiqueta]) => (
             <button
               key={modo}
               type="button"
-              disabled={client.billing_mode === modo}
-              onClick={() =>
+              role="radio"
+              aria-checked={client.billing_mode === modo}
+              onClick={() => {
+                if (client.billing_mode === modo) return;
                 confirm({
                   title: `Cambiar a "${etiqueta}"`,
                   description:
@@ -133,11 +139,11 @@ export function ClientDetail({
                       : 'Vuelve a mostrarse la comparación contra la cuota mensual definida para esta marca.',
                   confirmLabel: 'Cambiar',
                   onConfirm: () => run(() => updateClientEntity(client.id, { billing_mode: modo })),
-                })
-              }
-              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition disabled:cursor-default ${
+                });
+              }}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
                 client.billing_mode === modo
-                  ? 'border-brand-500 bg-brand-50 text-brand-700'
+                  ? 'cursor-default border-brand-500 bg-brand-50 text-brand-700'
                   : 'border-slate-300 text-slate-600 hover:bg-slate-50'
               }`}
             >

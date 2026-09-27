@@ -68,7 +68,7 @@ export function PanelDeMetricas({
       <div>
         <p className="eyebrow mb-1">{clientName}</p>
         <h1 className="text-xl font-semibold text-slate-900">
-          Métricas del <span className="text-accent">paquete</span>
+          Métricas del <span className="title-accent">paquete</span>
         </h1>
         <p className="text-sm text-slate-500">
           {MESES[mes - 1]} {anio}

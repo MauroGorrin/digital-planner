@@ -34,6 +34,11 @@ export function NewClientForm() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El cliente SI se creo pero sus cuotas no se guardaron. Se muestra en linea y no con
+  // window.alert: el alert bloquea el hilo, no se puede estilar, el navegador puede suprimirlo,
+  // y saltaba justo antes de navegar -- el usuario leia el aviso y acto seguido perdia el
+  // contexto. Guardamos tambien el id para ofrecerle ir a la ficha cuando el quiera.
+  const [aviso, setAviso] = useState<{ mensaje: string; clienteId: string } | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,7 +62,11 @@ export function NewClientForm() {
         billing_mode: billingMode,
         quotas: quotasNumericas,
       });
-      if (quotaWarning) window.alert(quotaWarning);
+      if (quotaWarning) {
+        setAviso({ mensaje: quotaWarning, clienteId: id });
+        setLoading(false);
+        return;
+      }
       router.push(`/clientes/${id}`);
       router.refresh();
     } catch (err) {
@@ -98,10 +107,16 @@ export function NewClientForm() {
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-700">¿Este cliente trabaja por paquetes?</label>
-        <div className="flex gap-3">
+        <span id="modo-facturacion" className="mb-1 block text-sm font-medium text-slate-700">
+          ¿Este cliente trabaja por paquetes?
+        </span>
+        {/* radiogroup y no dos botones sueltos: las dos opciones son mutuamente excluyentes,
+            y sin aria-checked un lector de pantalla no puede anunciar cual esta elegida. */}
+        <div className="flex gap-3" role="radiogroup" aria-labelledby="modo-facturacion">
           <button
             type="button"
+            role="radio"
+            aria-checked={billingMode === 'paquete'}
             onClick={() => setBillingMode('paquete')}
             className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
               billingMode === 'paquete' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
@@ -111,6 +126,8 @@ export function NewClientForm() {
           </button>
           <button
             type="button"
+            role="radio"
+            aria-checked={billingMode === 'libre'}
             onClick={() => setBillingMode('libre')}
             className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition ${
               billingMode === 'libre' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-300 text-slate-600 hover:bg-slate-50'
@@ -150,11 +167,28 @@ export function NewClientForm() {
       )}
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+      {aviso && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p>{aviso.mensaje}</p>
+          <button
+            type="button"
+            onClick={() => {
+              router.push(`/clientes/${aviso.clienteId}`);
+              router.refresh();
+            }}
+            className="mt-1 font-medium underline"
+          >
+            Ir a la ficha del cliente
+          </button>
+        </div>
+      )}
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
           Cancelar
         </button>
-        <button type="submit" disabled={loading} className="btn-primary">
+        {/* Deshabilitado tambien con `aviso`: ahi el cliente ya se creo y volver a enviar el
+            formulario crearia otro. Con window.alert el riesgo no existia porque navegaba. */}
+        <button type="submit" disabled={loading || aviso !== null} className="btn-primary">
           {loading ? 'Creando…' : 'Crear cliente'}
         </button>
       </div>
