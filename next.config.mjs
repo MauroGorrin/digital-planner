@@ -7,7 +7,16 @@ function origenDeSupabase() {
   if (!bruta) return null;
   try {
     const u = new URL(bruta);
-    return { protocol: u.protocol.replace(':', ''), hostname: u.hostname, port: u.port, origin: u.origin };
+    return {
+      protocol: u.protocol.replace(':', ''),
+      hostname: u.hostname,
+      port: u.port,
+      origin: u.origin,
+      // Supabase Realtime abre un WebSocket contra el mismo host (components/NotificationBell.tsx
+      // se suscribe a un canal). Sin este origen en connect-src, la campana de notificaciones deja
+      // de recibir nada y no lo dice: el navegador bloquea la conexión en silencio.
+      origenWs: u.origin.replace(/^http/, 'ws'),
+    };
   } catch {
     return null;
   }
@@ -39,11 +48,67 @@ const patronesRemotos = supabase
     ]
   : [];
 
+// Los orígenes de Supabase que el navegador necesita alcanzar. Salen de la MISMA variable que los
+// patrones de imagen de arriba, a propósito: si un día alguien cambia de proyecto, no hay dos
+// hostnames que actualizar por separado.
+const origenesSupabase = supabase ? `${supabase.origin} ${supabase.origenWs}` : '';
+
+/**
+ * Política de seguridad de contenido.
+ *
+ * Calibrado con honestidad: no hay `dangerouslySetInnerHTML` ni ningún sumidero de HTML crudo en
+ * esta app, así que el escape por defecto de React ya tapa el camino habitual de XSS almacenado.
+ * Aquí la CSP es defensa en profundidad. Lo que sí cierra hoy mismo es el CLICKJACKING: sin
+ * protección de marco, un tercero puede embeber /piezas/[id] y hacer que un contacto del cliente
+ * pulse "Aprobar" sin saberlo, que es la acción central del negocio.
+ *
+ * `script-src` conserva 'unsafe-inline' A PROPÓSITO. Next inyecta su propio bootstrap inline y no
+ * hay nonces conectados en esta app; quitarlo ahora rompe la hidratación en toda la aplicación. El
+ * seguimiento es cablear un nonce en el middleware y en `layout.tsx` y recién entonces quitarlo. Una
+ * cabecera de seguridad que obliga a alguien a desactivarla después es peor que no tenerla.
+ *
+ * `style-src` también lo conserva: Tailwind compila a un archivo, pero React escribe estilos inline
+ * en atributos `style` y Next inyecta CSS inline en desarrollo.
+ */
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  `img-src 'self' data: blob:${supabase ? ' ' + supabase.origin : ''}`,
+  `connect-src 'self'${origenesSupabase ? ' ' + origenesSupabase : ''}`,
+  "font-src 'self' data:",
+  // Las URLs firmadas de los adjuntos se abren en <video>/<audio> y en iframes de previsualización
+  // del propio Storage, todo bajo el origen de Supabase.
+  `media-src 'self' blob:${supabase ? ' ' + supabase.origin : ''}`,
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+
+const cabecerasDeSeguridad = [
+  { key: 'Content-Security-Policy', value: csp },
+  // Vercel ya pone HSTS en sus propios dominios; en un dominio propio o en otro alojamiento no lo
+  // pone nadie, y la cabecera no estorba donde ya está.
+  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
+  // Redundante con frame-ancestors para navegadores al día, y la única protección en los que no.
+  { key: 'X-Frame-Options', value: 'DENY' },
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: { ignoreDuringBuilds: true },
+  // Ya no hay `eslint: { ignoreDuringBuilds: true }` (CN-025): `npm run lint` está limpio, así que
+  // el build puede volver a fallar por lint sin costarle nada a nadie. El gate de CI no cambia --
+  // lint y tsc siguen siendo pasos duros aparte -- pero un deploy hecho fuera de CI ya no se salta
+  // el linter.
   images: {
     remotePatterns: patronesRemotos,
+  },
+  async headers() {
+    return [{ source: '/(.*)', headers: cabecerasDeSeguridad }];
   },
 };
 

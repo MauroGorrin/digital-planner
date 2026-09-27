@@ -5,13 +5,25 @@ on:
     branches: [main, master]
   pull_request:
 
+# El workflow heredaba el alcance por omision del GITHUB_TOKEN del repositorio, que en un repo
+# personal puede ser amplio y no se podia leer desde fuera (CN-023). Aqui no se escribe nada: solo
+# se instala, se revisa y se compila.
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      # Las dos acciones van fijadas al SHA completo del commit, no al tag (CN-022). Un tag es
+      # mutable: quien pueda moverlo cambia lo que corre aqui sin que el diff de este archivo lo
+      # muestre. Son acciones de GitHub, este workflow no referencia ningun secreto y el disparador es
+      # `pull_request` y no `pull_request_target`, asi que esto es higiene y no un camino abierto --
+      # pero es higiene barata. Dependabot (.github/dependabot.yml) mantiene los SHA al dia y el
+      # comentario dice a que version corresponde cada uno.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '22'
           cache: 'npm'

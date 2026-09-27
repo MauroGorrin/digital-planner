@@ -31,7 +31,11 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith('/login') || path.startsWith('/api/webhooks') || path.startsWith('/_next');
+  // Fuera `/api/webhooks`: no existe ninguna ruta detras de ese prefijo (CN-016). Dejarlo en la
+  // lista significa que quien anada app/api/webhooks/** manana hereda un endpoint SIN AUTENTICAR
+  // por omision, sin haberlo decidido. Cuando exista esa ruta, volvera aqui junto con su propia
+  // verificacion de firma, no antes.
+  const isPublic = path.startsWith('/login') || path.startsWith('/_next');
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();

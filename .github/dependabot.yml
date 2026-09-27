@@ -1,0 +1,18 @@
+# Nada en el repositorio avisaba de un aviso de seguridad publicado ni de un tag movido: las
+# dependencias de runtime van en rangos con caret y las actualizaciones dependian de que alguien se
+# acordara de correr `npm audit` (CN-021). Eso es buena parte de la razon por la que se acumularon 24
+# avisos en `next` sin que nadie los viera.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+
+  # Mantiene al dia los SHA con los que estan fijadas las acciones en ci.yml (CN-022). Sin esto,
+  # fijar por SHA cambia un riesgo de tag mutable por dependencias congeladas para siempre.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireAgency } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import type { ContentFormat } from '@/types/database';
+import { errorParaElCliente } from '@/lib/errores';
 
 /**
  * Define (o actualiza) la cuota mensual de un formato para una marca. El cliente nunca llega
@@ -16,7 +17,7 @@ export async function definirCuotaDeFormato(clientId: string, format: ContentFor
   const { error } = await supabase
     .from('client_packages')
     .upsert({ client_id: clientId, format, monthly_quota: monthlyQuota }, { onConflict: 'client_id,format' });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'definirCuotaDeFormato');
   revalidatePath('/metricas');
 }
 
@@ -29,6 +30,6 @@ export async function quitarFormatoDelPaquete(clientId: string, format: ContentF
   await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.from('client_packages').delete().eq('client_id', clientId).eq('format', format);
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'quitarFormatoDelPaquete');
   revalidatePath('/metricas');
 }

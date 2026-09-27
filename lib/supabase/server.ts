@@ -1,3 +1,10 @@
+import 'server-only';
+
+// Este modulo lee SUPABASE_SERVICE_ROLE_KEY. Hoy es de servidor por construccion -- se traza el
+// grafo de imports y ningun archivo "use client" llega hasta aqui -- pero nada lo IMPONIA, y un
+// import accidental desde un componente de cliente mandaria la llave de servicio al navegador.
+// 'server-only' convierte ese error en un fallo de compilacion en vez de una fuga (CN-016).
+// Viene con Next; no agrega ninguna dependencia.
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 

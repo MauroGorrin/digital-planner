@@ -5,11 +5,12 @@ import { requireAgency, requireProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { enlaceDeReferenciaValidado } from '@/lib/url-segura';
 import type { ContentFormat, PlatformType } from '@/types/database';
+import { errorParaElCliente } from '@/lib/errores';
 
 async function llamar(rpc: string, args: Record<string, unknown>) {
   const supabase = createClient();
   const { error } = await supabase.rpc(rpc, args);
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, rpc);
   revalidatePath('/ideas');
   revalidatePath('/pendientes');
 }
@@ -35,7 +36,7 @@ export async function crearIdea(input: {
     suggested_format: input.suggested_format ?? null,
     created_by: profile.id,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'crearIdea');
   revalidatePath('/ideas');
 }
 

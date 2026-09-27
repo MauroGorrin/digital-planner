@@ -58,6 +58,10 @@ export async function dispatchWebhookEvent(payload: DispatchPayload) {
             'X-Planner-Event': payload.event,
           },
           body,
+          // Sin timeout, un destino que no responde cuelga el Promise.all de abajo y con el la
+          // Server Action que disparo la transicion: el problema de disponibilidad de CN-009, que
+          // es independiente del SSRF. Diez segundos es de sobra para un webhook.
+          signal: AbortSignal.timeout(10_000),
         });
         responseStatus = res.status;
       } catch (err) {

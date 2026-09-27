@@ -7,6 +7,7 @@ import { dispatchWebhookEvent, buildWebhookPayload } from '@/lib/webhooks/dispat
 import { syncPieceToGoogleCalendar } from '@/lib/google-calendar/sync';
 import { enlaceDeReferenciaValidado } from '@/lib/url-segura';
 import type { ContentFormat, ContentPiece, PlatformType } from '@/types/database';
+import { errorParaElCliente } from '@/lib/errores';
 
 function getBaseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -52,7 +53,7 @@ export async function createContentPiece(input: {
     .insert({ ...input, reference_link: enlaceDeReferenciaValidado(input.reference_link), created_by: profile.id })
     .select('id')
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'createContentPiece');
   revalidatePath('/calendario');
   revalidatePath('/pendientes');
   return data.id as string;
@@ -97,7 +98,7 @@ export async function updateContentPiece(
     limpio.reference_link = enlaceDeReferenciaValidado(limpio.reference_link as string | null);
   }
   const { error } = await supabase.from('content_pieces').update(limpio).eq('id', id);
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'updateContentPiece');
   revalidatePath('/calendario');
   revalidatePath(`/piezas/${id}`);
 }
@@ -126,7 +127,7 @@ export async function duplicateContentPiece(id: string) {
     })
     .select('id')
     .single();
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'duplicateContentPiece');
   revalidatePath('/calendario');
   return data.id as string;
 }
@@ -135,7 +136,7 @@ export async function deleteContentPiece(id: string) {
   await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.from('content_pieces').delete().eq('id', id);
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'deleteContentPiece');
   revalidatePath('/calendario');
 }
 
@@ -146,7 +147,7 @@ export async function rescheduleContentPiece(id: string, newScheduledAt: string)
     p_content_piece_id: id,
     p_new_scheduled_at: newScheduledAt,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'rescheduleContentPiece');
 
   const piece = await loadPieceWithClient(id);
   if (piece) {
@@ -163,7 +164,7 @@ export async function submitForReview(id: string) {
   const profile = await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.rpc('submit_for_review', { p_content_piece_id: id });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'submitForReview');
   const piece = await loadPieceWithClient(id);
   if (piece) {
     await dispatchWebhookEvent(
@@ -179,7 +180,7 @@ export async function approvePiece(id: string, note?: string) {
   const profile = await requireProfile();
   const supabase = createClient();
   const { error } = await supabase.rpc('approve_content_piece', { p_content_piece_id: id, p_note: note ?? null });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'approvePiece');
   const piece = await loadPieceWithClient(id);
   if (piece) {
     await dispatchWebhookEvent(
@@ -196,7 +197,7 @@ export async function requestPieceChanges(id: string, note: string) {
   const profile = await requireProfile();
   const supabase = createClient();
   const { error } = await supabase.rpc('request_changes', { p_content_piece_id: id, p_note: note });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'requestPieceChanges');
   const piece = await loadPieceWithClient(id);
   if (piece) {
     await dispatchWebhookEvent(
@@ -212,7 +213,7 @@ export async function markPieceScheduled(id: string) {
   const profile = await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.rpc('mark_scheduled', { p_content_piece_id: id });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'markPieceScheduled');
   const piece = await loadPieceWithClient(id);
   if (piece) {
     await dispatchWebhookEvent(
@@ -228,7 +229,7 @@ export async function markPiecePublished(id: string) {
   const profile = await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.rpc('mark_published', { p_content_piece_id: id });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'markPiecePublished');
   const piece = await loadPieceWithClient(id);
   if (piece) {
     await dispatchWebhookEvent(
@@ -243,7 +244,7 @@ export async function cancelPiece(id: string, reason: string) {
   await requireAgency();
   const supabase = createClient();
   const { error } = await supabase.rpc('cancel_content_piece', { p_content_piece_id: id, p_reason: reason });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'cancelPiece');
   revalidatePath('/calendario');
   revalidatePath(`/piezas/${id}`);
 }
@@ -264,7 +265,7 @@ export async function addComment(
     attachment_id: ancla?.attachmentId ?? null,
     video_segundo: ancla?.videoSegundo ?? null,
   });
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'addComment');
 
   const piece = await loadPieceWithClient(id);
   if (piece) {
@@ -280,7 +281,7 @@ export async function addComment(
       p_content_piece_id: id,
       p_body: body,
     });
-    if (notificacionError) throw new Error(notificacionError.message);
+    if (notificacionError) throw errorParaElCliente(notificacionError, 'addComment');
   }
   revalidatePath(`/piezas/${id}`);
 }
@@ -293,6 +294,6 @@ export async function deleteAttachment(attachmentId: string, pieceId: string) {
     await supabase.storage.from('attachments').remove([attachment.file_path]);
   }
   const { error } = await supabase.from('attachments').delete().eq('id', attachmentId);
-  if (error) throw new Error(error.message);
+  if (error) throw errorParaElCliente(error, 'deleteAttachment');
   revalidatePath(`/piezas/${pieceId}`);
 }

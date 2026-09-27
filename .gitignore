@@ -23,7 +23,14 @@ supabase/.branches/
 
 # misc
 .DS_Store
+
+# llaves y credenciales. Ninguno de estos archivos existe en el arbol ni en el historial: esto es
+# tapar un hueco de la red, no limpiar una fuga (CN-024).
 *.pem
+*.key
+*.p12
+credentials.json
+service-account*.json
 npm-debug.log*
 
 # typescript

@@ -39,11 +39,37 @@ if (!URL || !SERVICE) {
   process.exit(1);
 }
 
-const esLocal = /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(URL);
-if (!esLocal) {
+// Esta guarda existe para que el seeder nunca corra contra un proyecto alojado. La version
+// anterior era una expresion regular anclada al principio, y NO AGUANTABA: aceptaba un `:`
+// inmediatamente despues del host permitido, asi que el userinfo de la URL podia empezar con un
+// host permitido mientras `new URL` y `fetch` resolvian el host de verdad, el que va despues del
+// `@`. Con NEXT_PUBLIC_SUPABASE_URL=http://localhost:1@evil.example.com/ la regex daba positivo y
+// el script corria contra evil.example.com CON EL SERVICE_ROLE_KEY, creando usuarios de demo con
+// la contrasena fija 'demo1234' (CN-010). Curiosamente http://127.0.0.1@evil.example.com/ si se
+// rechazaba, porque el `@` no pasaba la clase de caracteres: el hueco concreto era la forma con
+// puerto en el userinfo.
+//
+// Ahora se parsea en vez de buscar un patron, se rechazan usuario y contrasena de plano -- no hay
+// ningun motivo legitimo para que una URL de Supabase local lleve credenciales embebidas -- y el
+// hostname se compara contra un conjunto exacto.
+let u;
+try {
+  // `globalThis.URL`, no `URL`: la constante de arriba se llama URL y TAPA el constructor global en
+  // este modulo. Con `new URL(URL)` el parseo lanzaba siempre un TypeError, el catch lo tragaba y el
+  // seeder se negaba a correr incluso contra la Supabase local -- una guarda que falla cerrada, si,
+  // pero tambien una que no funciona.
+  u = new globalThis.URL(URL);
+} catch {
+  console.error('NEXT_PUBLIC_SUPABASE_URL no es una URL valida.');
+  process.exit(1);
+}
+
+const HOSTS_LOCALES = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+if (u.username || u.password || !HOSTS_LOCALES.has(u.hostname)) {
   console.error(
     `Este seed es solo para desarrollo local y ${URL} no lo parece. ` +
-      'Para producción, crea el primer administrador desde el panel de Supabase (ver README).'
+      'Para produccion, crea el primer administrador desde el panel de Supabase (ver README).'
   );
   process.exit(1);
 }
