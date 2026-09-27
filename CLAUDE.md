@@ -116,3 +116,22 @@ existente en `.gitignore`.
    `tests/unit/**` reemplacen los mocks por llamadas reales.
 5. Nunca marques una tarea terminada con el gate de comandos en rojo.
 6. Nunca commitees `.env`, `.env.local` ni ningún archivo con secretos reales.
+7. Nunca habilites el registro público (`enable_signup`) — ni en `supabase/config.toml` ni en el
+   panel de Supabase. El alta es solo por invitación, vía `inviteUser` con el service role. Con el
+   registro abierto, `/auth/v1/signup` es un endpoint público que crea perfiles, y el rol de un
+   perfil decide toda la autorización del producto.
+8. Nunca cambies `profiles.role`, `content_pieces.status`, `ideas.status` ni el `client_id` de una
+   pieza o de una idea con un `update` desde la app. `0007_endurecimiento_privilegios.sql` le quitó
+   a `authenticated` el permiso sobre esas columnas, así que el intento falla con `42501`: el único
+   camino son las funciones `SECURITY DEFINER`.
+
+## Si agregas una columna a `profiles`, `content_pieces` o `ideas`
+
+`0007_endurecimiento_privilegios.sql` revoca el permiso de tabla y lo vuelve a otorgar **columna por
+columna**, excluyendo las protegidas. Eso tiene un costo que conviene conocer antes de toparse con
+él: **una columna nueva nace sin permiso para `authenticated`, y la app no podrá escribirla** hasta
+que vuelvas a aplicar `0007`. La lista se calcula dinámicamente desde `pg_attribute`, así que
+re-aplicar ese archivo es todo el arreglo.
+
+Si una escritura nueva falla con `42501` justo después de que agregaste una columna, esta es la
+causa y no un problema de RLS.

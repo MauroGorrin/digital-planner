@@ -31,10 +31,14 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000"]
 jwt_expiry = 3600
-enable_signup = true
+# El producto es solo por invitacion (ver app/login/page.tsx): el alta la hace inviteUser con el
+# service role, que no pasa por esta opcion. Dejarla en true no habilita ninguna funcion del
+# producto y si abre el endpoint publico /auth/v1/signup. Espejo de lo que debe estar en el panel
+# de Supabase en produccion; si aca dice false y alla true, manda el panel.
+enable_signup = false
 
 [auth.email]
-enable_signup = true
+enable_signup = false
 enable_confirmations = false
 
 [storage]
