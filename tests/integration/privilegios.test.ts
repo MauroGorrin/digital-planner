@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { agenciaDelBackfill } from '@/tests/integration/agencia';
 
 // Corre contra la Supabase LOCAL levantada por `npm run test:integration`. Nunca contra un
 // proyecto remoto: las credenciales salen de .env.test.local, que scripts/write-supabase-test-env.mjs
@@ -31,6 +32,9 @@ const correos = {
 };
 
 const ids = { agencia: '', contacto: '', marca: '', marcaB: '' };
+// La agencia del backfill de 0009_agencias.sql. Se resuelve en beforeAll porque `clients.agency_id`
+// es not null y el check de profiles exige agencia para todo rol de agencia.
+let idAgencia = '';
 
 // Código de Postgres para "permiso denegado" (insufficient_privilege). Se afirma el código y no
 // sólo la existencia del error a propósito: sin esto la prueba pasaría en verde por cualquier
@@ -108,15 +112,16 @@ beforeAll(async () => {
   ids.contacto = await crearUsuario(correos.contacto);
 
   // handle_new_user() ya creó los profiles con rol 'client'; el de agencia necesita su rol real.
+  idAgencia = await agenciaDelBackfill(admin);
   const { error: rolError } = await admin
     .from('profiles')
-    .update({ role: 'agency_admin' })
+    .update({ role: 'agency_admin', agency_id: idAgencia })
     .eq('id', ids.agencia);
   if (rolError) throw rolError;
 
   const { data: marca, error } = await admin
     .from('clients')
-    .insert({ name: `Marca privilegios ${sufijo}`, brand_name: 'Privilegios', created_by: ids.agencia })
+    .insert({ name: `Marca privilegios ${sufijo}`, brand_name: 'Privilegios', agency_id: idAgencia, created_by: ids.agencia })
     .select('id')
     .single();
   if (error) throw error;
@@ -126,7 +131,7 @@ beforeAll(async () => {
   // ni un adjunto apuntar a la carpeta de otra.
   const { data: marcaB, error: errorB } = await admin
     .from('clients')
-    .insert({ name: `Marca privilegios B ${sufijo}`, brand_name: 'Privilegios B', created_by: ids.agencia })
+    .insert({ name: `Marca privilegios B ${sufijo}`, brand_name: 'Privilegios B', agency_id: idAgencia, created_by: ids.agencia })
     .select('id')
     .single();
   if (errorB) throw errorB;

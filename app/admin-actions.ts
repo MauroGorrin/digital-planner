@@ -20,9 +20,27 @@ export async function createClientEntity(input: {
   const supabase = await createClient();
   const { name, brand_name, timezone, notes, billing_mode, quotas } = input;
 
+  // `clients.agency_id` es `not null` desde 0009_agencias.sql: una marca nace en la agencia de
+  // quien la crea y no se muda nunca (esa migración le quitó a `authenticated` el privilegio de
+  // update sobre la columna). requireAgency() ya garantizó que el rol no es "client", y el check
+  // `profiles_agency_id_rol_check` garantiza que entonces `agency_id` no es nulo -- pero
+  // TypeScript no lee los checks de Postgres, así que se comprueba aquí para fallar con una frase
+  // que diga qué hacer en vez de con el "null value in column" de Postgres.
+  if (!profile.agency_id) {
+    throw new Error('Tu perfil no tiene agencia asignada. Aplica supabase/migrations/0009_agencias.sql.');
+  }
+
   const { data, error } = await supabase
     .from('clients')
-    .insert({ name, brand_name, timezone, notes, billing_mode, created_by: profile.id })
+    .insert({
+      name,
+      brand_name,
+      timezone,
+      notes,
+      billing_mode,
+      agency_id: profile.agency_id,
+      created_by: profile.id,
+    })
     .select('id')
     .single();
   if (error) throw errorParaElCliente(error, 'createClientEntity');
@@ -106,7 +124,7 @@ export async function crearUsuario(input: {
   role: UserRole;
   client_id?: string;
 }): Promise<ResultadoDeCrearUsuario> {
-  await requireAgencyAdmin();
+  const quienInvita = await requireAgencyAdmin();
   const admin = createServiceClient();
 
   const { data: existing } = await admin.from('profiles').select('id').eq('email', input.email).maybeSingle();
@@ -148,7 +166,23 @@ export async function crearUsuario(input: {
   // Se comprueba el error a propósito: un fallo silencioso aquí dejaría a la persona con el
   // 'client' del default de la columna, y un miembro de agencia se encontraría sin permisos sin
   // que nada lo reportara -- exactamente el tipo de fallo mudo que costó caro en CN-015.
-  const { error: rolError } = await admin.from('profiles').update({ role: input.role }).eq('id', userId);
+  // El rol y la agencia van en el MISMO update, y no es un detalle de estilo: el check
+  // `profiles_agency_id_rol_check` de 0009_agencias.sql exige que un rol de agencia traiga
+  // agencia y que un "client" no la traiga. Partirlo en dos escrituras haría rebotar la primera
+  // con 23514 (check_violation) y dejaría al invitado como cliente, que es justo el fallo mudo
+  // que el comentario de arriba dice que hay que evitar.
+  //
+  // La agencia es la de quien invita: `crearUsuario` suma gente al equipo de SU agencia, nunca al
+  // de otra. Un contacto de cliente no pertenece a ninguna y se conecta por `client_contacts`.
+  const agencyId = input.role === 'client' ? null : quienInvita.agency_id;
+  if (input.role !== 'client' && !agencyId) {
+    throw new Error('Tu perfil no tiene agencia asignada. Aplica supabase/migrations/0009_agencias.sql.');
+  }
+
+  const { error: rolError } = await admin
+    .from('profiles')
+    .update({ role: input.role, agency_id: agencyId })
+    .eq('id', userId);
   if (rolError) throw errorParaElCliente(rolError, 'crearUsuario');
 
   await vincularAMarca(admin, input, userId);

@@ -39,6 +39,7 @@ function crearClientes(): Client[] {
     {
       id: 'client-a',
       name: 'Cliente A',
+      agency_id: 'agency-1',
       brand_name: 'Marca A',
       timezone: 'UTC',
       logo_url: null,
@@ -51,6 +52,7 @@ function crearClientes(): Client[] {
     {
       id: 'client-b',
       name: 'Cliente B',
+      agency_id: 'agency-1',
       brand_name: 'Marca B',
       timezone: 'UTC',
       logo_url: null,

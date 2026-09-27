@@ -18,11 +18,17 @@ vi.mock('@/app/actions-ideas', () => ({
 }));
 
 function crearPerfil(overrides: Partial<Profile> = {}): Profile {
+  const rol = overrides.role ?? 'client';
   return {
     id: 'profile-cliente',
     full_name: 'Carla Cliente',
     email: 'carla@cliente.test',
-    role: 'client',
+    role: rol,
+    // Un contacto de cliente no pertenece a ninguna agencia: se conecta por client_contacts.
+    // El personal de agencia siempre pertenece a una. Es la misma regla que amarra el check
+    // profiles_agency_id_rol_check de 0009_agencias.sql, y se deriva del rol para que un
+    // override de `role` en una prueba no fabrique un perfil imposible.
+    agency_id: rol === 'client' ? null : 'agency-1',
     phone: null,
     avatar_url: null,
     created_at: '2026-01-01T00:00:00.000Z',

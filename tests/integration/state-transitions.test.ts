@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { agenciaDelBackfill } from '@/tests/integration/agencia';
 
 // Corre contra la Supabase LOCAL levantada por `npm run test:integration`
 // (supabase start && supabase db reset). Nunca contra un proyecto remoto: las credenciales salen
@@ -26,6 +27,9 @@ const correos = {
 };
 
 const ids = { agencia: '', contacto: '', ajeno: '', cliente: '', clienteAjeno: '', pieza: '' };
+// La agencia del backfill de 0009_agencias.sql. Se resuelve en beforeAll porque `clients.agency_id`
+// es not null y el check de profiles exige agencia para todo rol de agencia.
+let idAgencia = '';
 
 async function crearUsuario(email: string) {
   const { data, error } = await admin.auth.admin.createUser({
@@ -64,15 +68,16 @@ beforeAll(async () => {
   ids.ajeno = await crearUsuario(correos.ajeno);
 
   // handle_new_user() ya creó los profiles; el admin de agencia necesita su rol real.
+  idAgencia = await agenciaDelBackfill(admin);
   const { error: rolError } = await admin
     .from('profiles')
-    .update({ role: 'agency_admin' })
+    .update({ role: 'agency_admin', agency_id: idAgencia })
     .eq('id', ids.agencia);
   if (rolError) throw rolError;
 
   const { data: cliente, error: cliError } = await admin
     .from('clients')
-    .insert({ name: 'Cliente de prueba', brand_name: 'Marca de prueba' })
+    .insert({ name: 'Cliente de prueba', brand_name: 'Marca de prueba', agency_id: idAgencia })
     .select('id')
     .single();
   if (cliError) throw cliError;
@@ -80,7 +85,7 @@ beforeAll(async () => {
 
   const { data: otro, error: otroError } = await admin
     .from('clients')
-    .insert({ name: 'Otro cliente', brand_name: 'Otra marca' })
+    .insert({ name: 'Otro cliente', brand_name: 'Otra marca', agency_id: idAgencia })
     .select('id')
     .single();
   if (otroError) throw otroError;

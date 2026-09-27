@@ -121,18 +121,27 @@ existente en `.gitignore`.
    service role, que crea la cuenta con una clave generada y la muestra una sola vez. Con el
    registro abierto, `/auth/v1/signup` es un endpoint público que crea perfiles, y el rol de un
    perfil decide toda la autorización del producto.
-8. Nunca cambies `profiles.role`, `content_pieces.status`, `ideas.status` ni el `client_id` de una
-   pieza o de una idea con un `update` desde la app. `0007_endurecimiento_privilegios.sql` le quitó
-   a `authenticated` el permiso sobre esas columnas, así que el intento falla con `42501`: el único
-   camino son las funciones `SECURITY DEFINER`.
+8. Nunca cambies `profiles.role`, `profiles.agency_id`, `clients.agency_id`,
+   `content_pieces.status`, `ideas.status` ni el `client_id` de una pieza o de una idea con un
+   `update` desde la app. `0009_agencias.sql` (que sustituye al bloque de
+   `0007_endurecimiento_privilegios.sql`) le quitó a `authenticated` el permiso sobre esas
+   columnas, así que el intento falla con `42501`: el único camino son las funciones
+   `SECURITY DEFINER` y el cliente de servicio.
 
-## Si agregas una columna a `profiles`, `content_pieces` o `ideas`
+## Si agregas una columna a `profiles`, `clients`, `content_pieces` o `ideas`
 
-`0007_endurecimiento_privilegios.sql` revoca el permiso de tabla y lo vuelve a otorgar **columna por
-columna**, excluyendo las protegidas. Eso tiene un costo que conviene conocer antes de toparse con
-él: **una columna nueva nace sin permiso para `authenticated`, y la app no podrá escribirla** hasta
-que vuelvas a aplicar `0007`. La lista se calcula dinámicamente desde `pg_attribute`, así que
-re-aplicar ese archivo es todo el arreglo.
+El bloque de privilegios de columna — hoy en `0009_agencias.sql`, antes en
+`0007_endurecimiento_privilegios.sql` — revoca el permiso de tabla y lo vuelve a otorgar **columna
+por columna**, excluyendo las protegidas. Eso tiene un costo que conviene conocer antes de toparse
+con él: **una columna nueva nace sin permiso para `authenticated`, y la app no podrá escribirla**
+hasta que el bloque se vuelva a ejecutar. La lista se calcula dinámicamente desde `pg_attribute`,
+así que re-aplicarlo es todo el arreglo.
+
+**Re-aplica `0009_agencias.sql`, no `0007`.** `0009` reejecuta el mismo bloque con el conjunto
+protegido ampliado (`profiles.agency_id` y `clients.agency_id` se suman a lo que ya protegía
+`0007`), así que **volver a pegar `0007` después de `0009` deshace esas dos protecciones** y deja a
+cualquier usuario cambiarse de agencia o mudar una marca a otra. Si agregas una columna que haya
+que proteger, agrégala a la lista de `0009`.
 
 Si una escritura nueva falla con `42501` justo después de que agregaste una columna, esta es la
 causa y no un problema de RLS.

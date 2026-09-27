@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { agenciaDelBackfill } from '@/tests/integration/agencia';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,6 +23,9 @@ const correos = {
 };
 
 const ids = { agencia: '', cliente: '', marca: '', marcaB: '' };
+// La agencia del backfill de 0009_agencias.sql. Se resuelve en beforeAll porque `clients.agency_id`
+// es not null y el check de profiles exige agencia para todo rol de agencia.
+let idAgencia = '';
 
 async function crearUsuario(email: string) {
   const { data, error } = await admin.auth.admin.createUser({
@@ -59,13 +63,15 @@ async function crearIdea(titulo: string, status: string, clientId: string = ids.
 beforeAll(async () => {
   ids.agencia = await crearUsuario(correos.agencia);
   ids.cliente = await crearUsuario(correos.cliente);
-  await admin.from('profiles').update({ role: 'agency_admin' }).eq('id', ids.agencia);
+  idAgencia = await agenciaDelBackfill(admin);
+  await admin.from('profiles').update({ role: 'agency_admin', agency_id: idAgencia }).eq('id', ids.agencia);
   await admin.from('profiles').update({ role: 'client' }).eq('id', ids.cliente);
 
   const { data: marca, error } = await admin
     .from('clients')
     .insert({
       name: `Marca ideas ${sufijo}`,
+      agency_id: idAgencia,
       brand_name: 'Ideas',
       timezone: 'America/Mexico_City',
       created_by: ids.agencia,
@@ -86,6 +92,7 @@ beforeAll(async () => {
     .from('clients')
     .insert({
       name: `Marca ideas B ${sufijo}`,
+      agency_id: idAgencia,
       brand_name: 'Ideas B',
       timezone: 'America/Mexico_City',
       created_by: ids.agencia,

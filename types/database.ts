@@ -72,11 +72,24 @@ export const FORMAT_LABELS: Record<ContentFormat, string> = {
   otro: 'Otro',
 };
 
+export interface Agency {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Profile {
   id: string;
   full_name: string;
   email: string;
   role: UserRole;
+  /**
+   * La agencia a la que pertenece el personal de agencia. Nulo en un contacto de cliente, que no
+   * pertenece a ninguna agencia sino a una o varias marcas (por `client_contacts`). El check
+   * `profiles_agency_id_rol_check` de `0009_agencias.sql` amarra las dos mitades de esa regla.
+   */
+  agency_id: string | null;
   phone: string | null;
   avatar_url: string | null;
   created_at: string;
@@ -92,6 +105,8 @@ export const BILLING_MODE_LABELS: Record<ClientBillingMode, string> = {
 export interface Client {
   id: string;
   name: string;
+  /** No es anulable: una marca siempre pertenece a una agencia (`not null` en la base). */
+  agency_id: string;
   brand_name: string;
   timezone: string;
   logo_url: string | null;

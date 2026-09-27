@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { agenciaDelBackfill } from '@/tests/integration/agencia';
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -22,6 +23,9 @@ const correos = {
 };
 
 const ids = { agencia: '', cliente: '', marca: '', marcaB: '' };
+// La agencia del backfill de 0009_agencias.sql. Se resuelve en beforeAll porque `clients.agency_id`
+// es not null y el check de profiles exige agencia para todo rol de agencia.
+let idAgencia = '';
 
 async function crearUsuario(email: string) {
   const { data, error } = await admin.auth.admin.createUser({
@@ -43,13 +47,15 @@ async function sesionDe(email: string): Promise<SupabaseClient> {
 beforeAll(async () => {
   ids.agencia = await crearUsuario(correos.agencia);
   ids.cliente = await crearUsuario(correos.cliente);
-  await admin.from('profiles').update({ role: 'agency_admin' }).eq('id', ids.agencia);
+  idAgencia = await agenciaDelBackfill(admin);
+  await admin.from('profiles').update({ role: 'agency_admin', agency_id: idAgencia }).eq('id', ids.agencia);
   await admin.from('profiles').update({ role: 'client' }).eq('id', ids.cliente);
 
   const { data: marca, error } = await admin
     .from('clients')
     .insert({
       name: `Marca paquetes ${sufijo}`,
+      agency_id: idAgencia,
       brand_name: 'Paquetes',
       timezone: 'America/Mexico_City',
       created_by: ids.agencia,
@@ -68,6 +74,7 @@ beforeAll(async () => {
     .from('clients')
     .insert({
       name: `Marca paquetes B ${sufijo}`,
+      agency_id: idAgencia,
       brand_name: 'Paquetes B',
       timezone: 'America/Mexico_City',
       created_by: ids.agencia,
@@ -224,6 +231,7 @@ describe('modo de facturacion de una marca', () => {
       .from('clients')
       .insert({
         name: `Marca sin modo ${sufijo}`,
+        agency_id: idAgencia,
         brand_name: 'Sin modo',
         timezone: 'America/Mexico_City',
         created_by: ids.agencia,
@@ -242,6 +250,7 @@ describe('modo de facturacion de una marca', () => {
       .from('clients')
       .insert({
         name: `Marca libre ${sufijo}`,
+        agency_id: idAgencia,
         brand_name: 'Libre',
         timezone: 'America/Mexico_City',
         billing_mode: 'libre',
@@ -255,6 +264,7 @@ describe('modo de facturacion de una marca', () => {
 
     const { error: errorInvalido } = await admin.from('clients').insert({
       name: `Marca invalida ${sufijo}`,
+      agency_id: idAgencia,
       brand_name: 'Invalida',
       timezone: 'America/Mexico_City',
       billing_mode: 'mensual',
