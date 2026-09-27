@@ -2,7 +2,7 @@ import { requireProfile } from '@/lib/auth';
 import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { PanelDeMetricas, type MarcaOpcion } from '@/components/PanelDeMetricas';
-import { agregarMetricas, limitesDelMes } from '@/lib/metricas';
+import { agregarMetricas, limitesDelMes, mesActualEn } from '@/lib/metricas';
 import type { Client, ClientPackage, ContentPiece } from '@/types/database';
 
 type MarcaConTz = MarcaOpcion & { timezone: string };
@@ -58,10 +58,13 @@ export default async function MetricasPage({
 
   const marcaSeleccionada = marcas.find((m) => m.id === searchParams.client) ?? marcas[0];
 
-  const ahora = new Date();
-  const anio = Number(searchParams.anio) || ahora.getUTCFullYear();
+  // El mes por omision tambien es el de la marca, no el del servidor: en UTC ya puede ser el dia
+  // 1 mientras en la zona de la marca sigue siendo el ultimo dia del mes anterior, y aterrizar en
+  // un paquete vacio al abrir la pantalla seria el mismo error de zona que cuida limitesDelMes.
+  const actual = mesActualEn(new Date(), marcaSeleccionada.timezone);
+  const anio = Number(searchParams.anio) || actual.anio;
   const mesParam = Number(searchParams.mes);
-  const mes = mesParam >= 1 && mesParam <= 12 ? mesParam : ahora.getUTCMonth() + 1;
+  const mes = mesParam >= 1 && mesParam <= 12 ? mesParam : actual.mes;
 
   // El punto que motiva todo este módulo: los límites se calculan en la zona horaria de LA
   // MARCA, no la del servidor. Una pieza a las 23:00 del último día del mes en esa zona no debe

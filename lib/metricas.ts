@@ -1,4 +1,4 @@
-import { fromZonedTime } from 'date-fns-tz';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 
 import type { ClientPackage, ContentFormat, ContentPiece } from '@/types/database';
 import { FORMAT_LABELS } from '@/types/database';
@@ -115,4 +115,20 @@ export function agregarMetricas(
   }
 
   return filas;
+}
+
+/**
+ * El año y el mes que está viviendo `timeZone` en el instante `ahora`.
+ *
+ * Existe para que el mes por omisión de la pantalla sea el de la marca y no el del servidor. Sin
+ * esto, alguien en Ciudad de México que abre el panel a las 19:00 del 31 de enero aterriza en
+ * febrero — porque en UTC ya es el día 1 — y ve un paquete vacío cuando para él todavía es enero.
+ * Es el mismo error de zona que `limitesDelMes` evita en el filtro, y no tendría sentido
+ * cuidarlo ahí y perderlo en el valor inicial.
+ *
+ * `mes` sale 1-12, igual que el que espera `limitesDelMes`.
+ */
+export function mesActualEn(ahora: Date, timeZone: string): { anio: number; mes: number } {
+  const [anio, mes] = formatInTimeZone(ahora, timeZone, 'yyyy-MM').split('-');
+  return { anio: Number(anio), mes: Number(mes) };
 }

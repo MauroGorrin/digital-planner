@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { agregarMetricas, limitesDelMes } from '@/lib/metricas';
+import { agregarMetricas, limitesDelMes, mesActualEn } from '@/lib/metricas';
 
 describe('limitesDelMes', () => {
   it('una pieza a las 23:00 del último día de enero cae en enero y no en febrero, en Ciudad de México', () => {
@@ -146,5 +146,21 @@ describe('agregarMetricas', () => {
     );
 
     expect(filas.map((fila) => fila.format)).toEqual(['reel', 'carrusel', 'otro']);
+  });
+});
+
+describe('mesActualEn', () => {
+  it('devuelve el mes de la marca, no el del servidor, en el borde de fin de mes', () => {
+    // 1 de febrero 01:00 UTC es todavia el 31 de enero a las 19:00 en Ciudad de Mexico.
+    const instante = new Date('2026-02-01T01:00:00.000Z');
+    expect(mesActualEn(instante, 'America/Mexico_City')).toEqual({ anio: 2026, mes: 1 });
+    // Y en una zona adelantada de UTC, el mismo instante ya es febrero.
+    expect(mesActualEn(instante, 'Asia/Tokyo')).toEqual({ anio: 2026, mes: 2 });
+  });
+
+  it('cruza el fin de anio hacia atras cuando la zona va detras de UTC', () => {
+    // 1 de enero de 2027, 02:00 UTC = 31 de diciembre de 2026, 20:00 en Ciudad de Mexico.
+    const instante = new Date('2027-01-01T02:00:00.000Z');
+    expect(mesActualEn(instante, 'America/Mexico_City')).toEqual({ anio: 2026, mes: 12 });
   });
 });
