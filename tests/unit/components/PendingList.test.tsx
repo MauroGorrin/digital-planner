@@ -1,12 +1,7 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
 import { PendingList } from '@/components/PendingList';
 import type { ContentPiece, Idea, Profile } from '@/types/database';
-
-// Con test.globals en false (ver vitest.setup.ts), '@testing-library/react' no encuentra un
-// 'afterEach' global y su auto-limpieza entre pruebas nunca se activa — sin esto, el DOM de una
-// prueba queda montado para la siguiente dentro del mismo archivo y los queries chocan.
-afterEach(() => cleanup());
 
 function crearPerfil(overrides: Partial<Profile> = {}): Profile {
   return {

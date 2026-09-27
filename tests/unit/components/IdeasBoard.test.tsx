@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IdeasBoard } from '@/components/IdeasBoard';
 import type { Idea, Profile } from '@/types/database';
@@ -78,10 +78,7 @@ function tarjetaDe(titulo: string): HTMLElement {
 }
 
 describe('IdeasBoard — acciones calculadas por marca', () => {
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
+  afterEach(() => vi.clearAllMocks());
 
   it('un cliente contacto de la marca A ve acciones en la idea de A pero no en la de B', () => {
     const ideaA = crearIdea({ id: 'idea-a', client_id: 'client-a', title: 'Idea de marca A', status: 'pendiente_cliente' });

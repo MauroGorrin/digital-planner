@@ -3,7 +3,18 @@
 // falla con "expect is not defined" mientras `test.globals` siga en false — que es como está
 // vitest.config.ts a propósito, para que cada prueba importe describe/it/expect explícitamente.
 import '@testing-library/jest-dom/vitest';
+import { cleanup } from '@testing-library/react';
+import { afterEach } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
+
+// Desmontaje entre pruebas, por el mismo motivo que el import de arriba: Testing Library registra
+// su `afterEach(cleanup)` automatico solo si detecta un `afterEach` global, y con
+// `test.globals: false` no existe. Sin esto, un archivo que llama a render() mas de una vez
+// arrastra el DOM de la prueba anterior y los getBy* fallan con "found multiple elements" --
+// un sintoma que no menciona la causa. Va aca y no en cada archivo para que nadie tenga que
+// acordarse: la primera prueba de componente de este proyecto lo resolvio copiando la linea tres
+// veces.
+afterEach(() => cleanup());
 
 /**
  * Cargador de variables de entorno sin dependencias nuevas (no usa dotenv ni la API

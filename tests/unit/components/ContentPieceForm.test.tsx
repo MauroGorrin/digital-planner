@@ -1,11 +1,7 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { ContentPieceForm } from '@/components/ContentPieceForm';
 import type { Client } from '@/types/database';
-
-// Ver nota equivalente en PendingList.test.tsx: sin esto, el segundo render del archivo se
-// acumula sobre el primero porque '@testing-library/react' no auto-limpia con test.globals: false.
-afterEach(() => cleanup());
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), back: vi.fn(), refresh: vi.fn() }),
