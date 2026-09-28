@@ -1,4 +1,6 @@
-// Configuración del captcha del alta pública. Módulo puro y sin dependencias: lo lee el formulario
+// Configuración del captcha del alta pública y del inicio de sesión (`/login` usa el mismo
+// interruptor: con el captcha encendido en Supabase, `signInWithPassword` también exige el token --
+// ver "Sobre el captcha" en CLAUDE.md). Módulo puro y sin dependencias: lo lee el formulario
 // (navegador) y la Server Action (servidor), y las dos tienen que coincidir en si hay captcha o no.
 //
 // EL CAPTCHA ES OPCIONAL A PROPÓSITO, y ésa es la decisión que explica todo este archivo. Supabase

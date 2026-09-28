@@ -109,15 +109,41 @@ promover se termina desde ahí en vez de quedar en un callejón sin salida.
 | `SUPABASE_SERVICE_ROLE_KEY` | sí | `lib/supabase/server.ts` (`createServiceClient`) | Panel de Supabase → Settings → API (nunca al navegador) |
 | `NEXT_PUBLIC_APP_URL` | sí | notificaciones, webhooks, eventos de calendario | fijo en local: `http://localhost:3000` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | opcional (solo si se usa Google Calendar) | `app/api/google-calendar/*`, `lib/google-calendar/sync.ts` | Google Cloud Console |
-| `NEXT_PUBLIC_CAPTCHA_PROVIDER` / `NEXT_PUBLIC_CAPTCHA_SITE_KEY` | opcional (captcha del alta pública) | `lib/captcha.ts`, `components/Captcha.tsx`, `app/registro-actions.ts` | Cloudflare Turnstile o hCaptcha |
+| `NEXT_PUBLIC_CAPTCHA_PROVIDER` / `NEXT_PUBLIC_CAPTCHA_SITE_KEY` | opcional (captcha del alta y del inicio de sesión) | `lib/captcha.ts`, `components/Captcha.tsx`, `app/registro-actions.ts`, `app/login/page.tsx` | Cloudflare Turnstile o hCaptcha |
 
 **Sobre el captcha:** se enciende **solo si las dos variables están puestas** (`turnstile` o
-`hcaptcha` como proveedor). Sin ellas `/registro` funciona igual, sin widget — a propósito: el alta
-no puede depender de una clave que hoy nadie ha contratado, y la Supabase local de las pruebas no
-tiene captcha ni forma de tenerlo. **Las dos mitades van juntas:** estas variables solo dibujan el
-widget y mandan el token; quien lo *verifica* es el proyecto de Supabase, así que además hay que
-activar el mismo proveedor con su clave **secreta** en el panel (Authentication → Settings → Bot and
-Abuse Protection). Con una mitad sola, o no hay protección o el alta rebota.
+`hcaptcha` como proveedor). Sin ellas `/registro` y `/login` funcionan igual, sin widget — a
+propósito: la app no puede depender de una clave que hoy nadie ha contratado, y la Supabase local de
+las pruebas lo tiene apagado (las pruebas de integración inician sesión con `signInWithPassword`, que
+con el captcha encendido rebotaría). **Las dos mitades van juntas:** estas variables solo dibujan el
+widget y mandan el token; quien lo *verifica* es el proyecto de Supabase, con el mismo proveedor y su
+clave **secreta** en el panel (Authentication → Settings → Bot and Abuse Protection).
+
+**Qué llamadas cubre, y por qué importa.** Encendido en el panel, GoTrue exige `captcha_token` en
+`/signup`, `/token?grant_type=password` (y `web3`), `/otp`, `/magiclink`, `/recover`, `/resend`,
+`/sso` y las opciones de passkey; **no** en `refresh_token`, `pkce` ni `id_token`, ni en llamadas con
+la clave de servicio. Fuente: `verifyCaptcha` e `isIgnoreCaptchaRoute` en
+`internal/api/middleware.go` y las rutas de `internal/api/api.go` de `supabase/auth`, y comprobado
+contra la Supabase local (gotrue v2.196.0) encendiéndolo a mano: `signUp`, `signInWithPassword`,
+`resetPasswordForEmail` y `signInWithOtp` sin token devuelven
+`400 captcha_failed … (no captcha_token found)`; `refreshSession` y `updateUser` con sesión pasan.
+En esta app las llamadas afectadas son **dos**: `signUp` en `app/registro-actions.ts` y
+`signInWithPassword` en `app/login/page.tsx`, y las dos mandan el token. No hay recuperación de
+contraseña, OTP ni enlace mágico; **si agregas uno, tiene que mandar el token igual** o quedará roto
+el día que el captcha esté encendido. `crearUsuario` usa `auth.admin.createUser` con la clave de
+servicio y queda exento.
+
+**El orden para encenderlo en producción, y no otro:**
+1. Desplegar con `NEXT_PUBLIC_CAPTCHA_PROVIDER` y `NEXT_PUBLIC_CAPTCHA_SITE_KEY` puestas en Vercel.
+   El widget aparece en `/login` y `/registro` y el token viaja, aunque Supabase todavía no lo mire.
+2. Comprobar que **el inicio de sesión sigue funcionando** en producción con esa versión.
+3. **Solo entonces** activar el captcha en el panel de Supabase con la clave **secreta** del mismo
+   proveedor.
+
+Al revés —panel primero— **deja fuera a todo el mundo, dueño incluido**: cualquier
+`signInWithPassword` sin token rebota con `captcha_failed`, y no hay forma de entrar a la app para
+arreglarlo (se apaga desde el panel). Las sesiones ya abiertas sobreviven, porque renovar el token no
+pide captcha.
 
 `.env.example` está commiteado y se mantiene sincronizado. `.env*` con valores reales nunca se
 commitea. `.env.test.local` (generado por `scripts/write-supabase-test-env.mjs` para

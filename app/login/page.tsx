@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { destinoSeguro } from '@/lib/url-segura';
+import { Captcha } from '@/components/Captcha';
+import { captchaEsObligatorio } from '@/lib/captcha';
 
 export default function LoginPage() {
   return (
@@ -21,16 +23,39 @@ function LoginForm() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El captcha del login es el MISMO que el de /registro (components/Captcha.tsx, lib/captcha.ts) y
+  // se enciende con las mismas dos variables. No es un adorno: con la protección activada en el
+  // panel de Supabase, GoTrue exige `captcha_token` también en `/token?grant_type=password`, no sólo
+  // en `/signup`. Sin este token, encender el captcha en el panel deja fuera a TODO el mundo, dueño
+  // incluido. El orden para encenderlo está en "Sobre el captcha" de CLAUDE.md.
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Un token de captcha sirve UNA vez: Supabase lo gasta aunque la contraseña sea incorrecta. Tras
+  // un intento fallido se vuelve a montar el widget (cambiando su `key`) para pedir uno nuevo; si
+  // no, el segundo intento rebotaría por el captcha y no por la contraseña.
+  const [intentoDeCaptcha, setIntentoDeCaptcha] = useState(0);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    if (captchaEsObligatorio() && !captchaToken) {
+      setError('Resuelve el captcha antes de continuar.');
+      return;
+    }
+    setLoading(true);
     const supabase = createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // Sin captcha configurado la llamada es exactamente la de siempre, sin `options`.
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
     setLoading(false);
     if (error) {
       setError('No pudimos iniciar sesión. Verifica tu correo y contraseña.');
+      if (captchaToken) {
+        setCaptchaToken(null);
+        setIntentoDeCaptcha((n) => n + 1);
+      }
       return;
     }
     // El parametro 'redirect' lo controla quien arma el enlace, no el middleware (CN-011).
@@ -73,6 +98,7 @@ function LoginForm() {
               placeholder="••••••••"
             />
           </div>
+          <Captcha key={intentoDeCaptcha} onToken={setCaptchaToken} />
           {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
           <button
             type="submit"
