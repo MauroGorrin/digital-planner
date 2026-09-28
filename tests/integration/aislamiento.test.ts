@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { generarClave } from '@/lib/clave';
 
 // Corre contra la Supabase LOCAL de `npm run test:integration`, nunca contra un proyecto remoto.
 //
@@ -396,12 +397,22 @@ describe('el administrador de A no escribe nada de B', () => {
   //
   // LO QUE ESTAS DOS PRUEBAS PRUEBAN DE VERDAD, DICHO SIN ADORNOS: se midió revirtiendo
   // `content_pieces_agency_update` y `content_pieces_agency_delete` a su `is_agency()` original, y
-  // las dos SIGUIERON EN VERDE. No es un fallo de la prueba, es cómo funciona Postgres: un UPDATE o
-  // un DELETE con `where` tiene que LEER la fila, así que se le aplica también la política de
-  // SELECT. Y `content_pieces_select` pasa por `has_client_access()`, que sí está aislada. Quitar el
-  // `.select()` tampoco cambia nada -- se probó: el `where` basta para que la política de lectura
-  // entre. No hay forma, por la API, de que una prueba distinga la política de escritura de la de
-  // lectura.
+  // las dos SIGUIERON EN VERDE.
+  //
+  // El motivo que decía antes este comentario -- "un UPDATE con `where` tiene que LEER la fila, así
+  // que se le aplica también la política de SELECT" -- está MAL, aunque la conclusión se sostenga.
+  // A nivel de SQL la política de escritura sí es alcanzable sin la de lectura: con
+  // `select using (false)` y `update using (true)`, un `update ... where id = 1` afecta 0 filas pero
+  // un `update` SIN `where` afecta 1. Sin `where` no se lee ninguna columna y la política de SELECT
+  // no entra. Se comprobó en la Postgres local.
+  //
+  // Lo que de verdad tapa ese camino es PostgREST, que rechaza toda escritura sin filtro con
+  // `21000 UPDATE requires a WHERE clause` -- también con la clave de servicio. Así que por esta API
+  // sigue sin haber forma de que una prueba distinga la política de escritura de la de lectura
+  // (quitar el `.select()` tampoco cambia nada, se probó), pero el que decide es ese guard, no
+  // Postgres. Si el guard desaparece o aparece una RPC `SECURITY INVOKER` que escriba sin filtro,
+  // estos caminos quedan expuestos y NINGUNA prueba de este archivo se pondrá roja. El detalle y la
+  // medición están en docs/superpowers/auditoria-aislamiento-0010.md, sección 4.
   //
   // Lo que sí detectan, y por eso siguen aquí: se vuelven ROJAS en cuanto se revierte
   // `has_client_access()`, que es la política que realmente decide. La versión acotada de las
@@ -442,9 +453,11 @@ describe('el administrador de A no escribe nada de B', () => {
     expect(data?.status).toBe('pendiente_revision');
   });
 
-  // Mismo límite que las dos de arriba, medido igual: revertir `attachments_agency_delete` a
-  // `is_agency()` a secas deja esta prueba en VERDE, porque el DELETE lee la fila y ahí entra
-  // `attachments_select`, que sí está aislada. Se vuelve roja al revertir `has_client_access()`.
+  // Mismo límite que las dos de arriba, y con el mismo matiz: revertir `attachments_agency_delete`
+  // a `is_agency()` a secas deja esta prueba en VERDE. El DELETE lleva `where`, así que lee columnas
+  // y entra `attachments_select`, que sí está aislada; y la variante sin `where`, que sí distinguiría
+  // una política de la otra, no la deja pasar PostgREST. Se vuelve roja al revertir
+  // `has_client_access()`.
   it('no puede borrar el adjunto de B: el adjunto sigue ahí', async () => {
     const { error } = await sesiones.adminA.from('attachments').delete().eq('id', B.adjunto);
 
@@ -763,5 +776,214 @@ describe('las credenciales de B no se leen desde A', () => {
       .insert({ client_id: A.marcaSinAsignar, connection_id: B.conexion });
 
     expect(error?.code).toBe(RLS_RECHAZA);
+  });
+});
+
+// ============================================================================================
+// EL VÍNCULO QUE ESCRIBE `crearUsuario` (app/admin-actions.ts)
+// ============================================================================================
+// QUÉ CAPA SE PRUEBA AQUÍ, DICHO SIN ADORNOS: la de la base de datos, no la Server Action.
+// `crearUsuario` importa `next/cache` y `@/lib/supabase/server`, que es `server-only`, y esta
+// suite habla con Postgres directamente: NINGUNA de estas pruebas ejecuta esa función. Lo que sí
+// ejercitan es la escritura exacta de su ayudante `vincularAMarca` -- un upsert a
+// `client_contacts` o a `client_assignments` -- CON EL MISMO CLIENTE que usa el código arreglado:
+// la sesión del administrador que llama, sujeta a RLS.
+//
+// Y eso es justo lo que el arreglo cambió. Antes esa fila se escribía con el cliente de SERVICIO,
+// que salta toda política, así que un administrador de la agencia A que pasara el `client_id` de
+// una marca de B a la Server Action se colgaba de esa marca: la fila entraba, y a partir de ahí
+// `has_client_access()` le respondía que sí a todo lo de B. La política nunca estuvo rota -- se
+// fabricaba la pertenencia por debajo de ella.
+//
+// LO QUE ESTA CAPA NO CUBRE, y hay que decirlo: que `vincularAMarca` siga escribiendo con el
+// cliente sujeto a RLS. Ninguna prueba de este repo lo comprueba, y `npm run typecheck` tampoco
+// -- se midió: `createServiceClient()` devuelve `any` porque usa `require()`, así que volver a
+// pasarle el cliente de servicio compila sin una queja. Lo que lo sostiene es que esa función ya
+// no recibe el cliente por parámetro: lo crea ella con `createClient()`. No hay llamada desde la
+// que colárselo, y reabrir el agujero exige editar esa función, justo debajo del comentario que
+// explica por qué no hacerlo.
+
+/**
+ * El mismo cliente con el que hoy escribe `vincularAMarca`: la sesión de quien crea la cuenta.
+ *
+ * Está en una función para que revertir el arreglo sea una sola línea -- devolver `admin`, el
+ * cliente de servicio, que es lo que hacía el código con el agujero -- y ver estas pruebas
+ * ponerse rojas. Se hizo, y se ponen rojas: los rechazos dejan de rechazar y las afirmaciones de
+ * "no quedó fila" encuentran la fila.
+ */
+function clienteQueVincula(): SupabaseClient {
+  return sesiones.adminA;
+}
+
+describe('el vínculo de `crearUsuario` no cruza de agencia', () => {
+  const creados: string[] = [];
+
+  async function perfilNuevo(etiqueta: string, role: string, agencia: string | null) {
+    const correo = `aisl-vinculo-${etiqueta}-${sufijo}@prueba.local`;
+    const clave = generarClave();
+    const { data, error } = await admin.auth.admin.createUser({
+      email: correo,
+      password: clave,
+      email_confirm: true,
+    });
+    if (error) throw error;
+    const id = data.user.id;
+    creados.push(id);
+    // Rol y agencia en el MISMO update, igual que `crearUsuario`: el check
+    // `profiles_agency_id_rol_check` rebota con 23514 si se parte en dos escrituras.
+    const { error: errorRol } = await admin
+      .from('profiles')
+      .update({ role, agency_id: agencia })
+      .eq('id', id);
+    if (errorRol) throw errorRol;
+    return { id, correo, clave };
+  }
+
+  afterAll(async () => {
+    for (const id of creados) await admin.auth.admin.deleteUser(id);
+  });
+
+  // ---- LO QUE ANTES SE ESCRIBÍA Y AHORA NO ------------------------------------------------
+  // La segunda mitad de cada una de estas -- que no quedó fila -- es la que importa: esta
+  // escritura ANTES TENÍA ÉXITO. Un rechazo sin mirar la tabla no distinguiría "rebotó" de
+  // "rebotó y además dejó la fila puesta".
+
+  it('un administrador de A no vincula a nadie como CONTACTO de una marca de B (42501)', async () => {
+    const persona = await perfilNuevo('contacto-b', 'client', null);
+
+    const { error } = await clienteQueVincula()
+      .from('client_contacts')
+      .upsert({ client_id: B.marca, profile_id: persona.id }, { onConflict: 'client_id,profile_id' });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+
+    const { data } = await admin
+      .from('client_contacts')
+      .select('id')
+      .eq('client_id', B.marca)
+      .eq('profile_id', persona.id);
+    expect(data ?? []).toEqual([]);
+  });
+
+  it('un administrador de A no vincula a nadie como EQUIPO de una marca de B (42501)', async () => {
+    const persona = await perfilNuevo('equipo-b', 'agency_member', A.agencia);
+
+    const { error } = await clienteQueVincula()
+      .from('client_assignments')
+      .upsert({ client_id: B.marca, profile_id: persona.id }, { onConflict: 'client_id,profile_id' });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+
+    const { data } = await admin
+      .from('client_assignments')
+      .select('id')
+      .eq('client_id', B.marca)
+      .eq('profile_id', persona.id);
+    expect(data ?? []).toEqual([]);
+  });
+
+  // La variante exacta que usó la revisión: el administrador de A teclea SU PROPIO correo, así que
+  // `crearUsuario` toma el camino de `yaExistia: true` -- no crea cuenta, no toca ninguna clave, y
+  // lo único que hace es el vínculo. Ese camino iba por el mismo cliente de servicio, así que
+  // devolvía `{ yaExistia: true }` y dejaba escrito `client_contacts(marca de B, admin de A)`.
+  it('un administrador de A no se vincula a SÍ MISMO a una marca de B (el caso `yaExistia`)', async () => {
+    const { error } = await clienteQueVincula()
+      .from('client_contacts')
+      .upsert({ client_id: B.marca, profile_id: A.admin }, { onConflict: 'client_id,profile_id' });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+
+    const { data } = await admin
+      .from('client_contacts')
+      .select('id')
+      .eq('client_id', B.marca)
+      .eq('profile_id', A.admin);
+    expect(data ?? []).toEqual([]);
+
+    // Y la consecuencia que buscaba el ataque tampoco se da: sin esa fila, la pieza de B sigue
+    // fuera de su alcance. Es lo que convertía un insert en una fuga completa.
+    const { data: piezas } = await sesiones.adminA.from('content_pieces').select('id, copy_text');
+    expect((piezas ?? []).map((p) => p.id)).not.toContain(B.pieza);
+  });
+
+  it('tampoco vincula a un usuario EXISTENTE de su propia agencia a una marca de B', async () => {
+    const { error } = await clienteQueVincula()
+      .from('client_assignments')
+      .upsert({ client_id: B.marca, profile_id: A.miembro }, { onConflict: 'client_id,profile_id' });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+
+    const { data } = await admin
+      .from('client_assignments')
+      .select('id')
+      .eq('client_id', B.marca)
+      .eq('profile_id', A.miembro);
+    expect(data ?? []).toEqual([]);
+  });
+
+  // ---- Y EL CAMINO LEGÍTIMO, ENTERO, QUE TIENE QUE SEGUIR FUNCIONANDO ----------------------
+  // Aislar de más es la otra forma de romperlo: si el arreglo hubiera cerrado también esto, la
+  // agencia no podría dar de alta a nadie y el gate seguiría en verde sin esta prueba.
+
+  it('un administrador de A sí crea un contacto en una marca de A: se vincula, queda con su rol y su agencia, y la clave generada le abre la sesión', async () => {
+    const persona = await perfilNuevo('contacto-a', 'client', null);
+
+    const { error } = await clienteQueVincula()
+      .from('client_contacts')
+      .upsert({ client_id: A.marca, profile_id: persona.id }, { onConflict: 'client_id,profile_id' });
+
+    expect(error).toBeNull();
+
+    const { data: vinculo } = await admin
+      .from('client_contacts')
+      .select('id')
+      .eq('client_id', A.marca)
+      .eq('profile_id', persona.id);
+    expect((vinculo ?? []).length).toBe(1);
+
+    // El rol y la agencia que fija `crearUsuario`: un contacto es 'client' y NO pertenece a
+    // ninguna agencia -- se conecta por `client_contacts`, que es la fila de arriba.
+    const { data: perfil } = await admin
+      .from('profiles')
+      .select('role, agency_id')
+      .eq('id', persona.id)
+      .single();
+    expect(perfil?.role).toBe('client');
+    expect(perfil?.agency_id).toBeNull();
+
+    // Y la clave que `crearUsuario` devuelve una sola vez sale de `generarClave()`, el mismo
+    // módulo que importa la Server Action. Que abra la sesión es lo que la hace una clave y no
+    // una cadena bonita.
+    const sesionNueva = createClient(URL!, ANON!, { auth: { persistSession: false } });
+    const { error: errorLogin } = await sesionNueva.auth.signInWithPassword({
+      email: persona.correo,
+      password: persona.clave,
+    });
+    expect(errorLogin).toBeNull();
+  });
+
+  it('y sí asigna a alguien de su equipo a una marca de A, con su rol y su agencia puestos', async () => {
+    const persona = await perfilNuevo('equipo-a', 'agency_member', A.agencia);
+
+    const { error } = await clienteQueVincula()
+      .from('client_assignments')
+      .upsert({ client_id: A.marcaSinAsignar, profile_id: persona.id }, { onConflict: 'client_id,profile_id' });
+
+    expect(error).toBeNull();
+
+    const { data: vinculo } = await admin
+      .from('client_assignments')
+      .select('id')
+      .eq('client_id', A.marcaSinAsignar)
+      .eq('profile_id', persona.id);
+    expect((vinculo ?? []).length).toBe(1);
+
+    const { data: perfil } = await admin
+      .from('profiles')
+      .select('role, agency_id')
+      .eq('id', persona.id)
+      .single();
+    expect(perfil?.role).toBe('agency_member');
+    expect(perfil?.agency_id).toBe(A.agencia);
   });
 });

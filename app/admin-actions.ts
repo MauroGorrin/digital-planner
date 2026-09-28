@@ -126,6 +126,34 @@ export async function crearUsuario(input: {
 }): Promise<ResultadoDeCrearUsuario> {
   const quienInvita = await requireAgencyAdmin();
   const admin = createServiceClient();
+  // El cliente con la sesión de quien llama, sujeto a RLS. Aquí resuelve la marca de abajo; el
+  // vínculo lo escribe `vincularAMarca`, que crea el suyo y explica en su comentario por qué.
+  const supabase = await createClient();
+
+  // La marca se valida ANTES de crear nada. Esto es un guard de USABILIDAD, no el control de
+  // seguridad: quien impide de verdad colgar a alguien de la marca de otra agencia son las
+  // políticas `client_contacts_write` y `client_assignments_write` de
+  // 0010_aislamiento_por_agencia.sql, y se aplican porque vincularAMarca escribe con el cliente
+  // sujeto a RLS. Está aquí porque sin ello el orden de los fallos es peor: se crearía la cuenta de
+  // auth, se le fijaría el rol, y recién entonces rebotaría el vínculo, dejando una cuenta huérfana
+  // a medio configurar que nadie pidió. Borrar esta comprobación empeora el mensaje de error;
+  // borrar el camino por RLS reabre el agujero. NO son intercambiables.
+  if (input.client_id) {
+    const { data: marca } = await supabase
+      .from('clients')
+      .select('id, agency_id')
+      .eq('id', input.client_id)
+      .maybeSingle();
+
+    // `clients_select` ya filtra por `has_client_access(id)`, así que una marca de otra agencia ni
+    // siquiera llega hasta aquí: se ve como inexistente. La comparación explícita contra
+    // `agency_id` es la otra mitad y no cuesta nada. El mensaje es el mismo en los dos casos a
+    // propósito: distinguir "no existe" de "es de otra agencia" ya sería contar algo de esa otra
+    // agencia.
+    if (!marca || marca.agency_id !== quienInvita.agency_id) {
+      throw new Error('Esa marca no existe o no pertenece a tu agencia.');
+    }
+  }
 
   const { data: existing } = await admin.from('profiles').select('id').eq('email', input.email).maybeSingle();
   const existente = existing?.id as string | undefined;
@@ -135,7 +163,7 @@ export async function crearUsuario(input: {
   // añadirlo a una segunda marca, por ejemplo -- lo dejaría fuera de su cuenta sin que ni él ni
   // quien lo hizo entendieran por qué. Quien llama lo distingue por `yaExistia` y no recibe clave.
   if (existente) {
-    await vincularAMarca(admin, input, existente);
+    await vincularAMarca(input, existente);
     revalidatePath(`/clientes/${input.client_id ?? ''}`);
     return { userId: existente, yaExistia: true };
   }
@@ -185,22 +213,49 @@ export async function crearUsuario(input: {
     .eq('id', userId);
   if (rolError) throw errorParaElCliente(rolError, 'crearUsuario');
 
-  await vincularAMarca(admin, input, userId);
+  await vincularAMarca(input, userId);
 
   revalidatePath(`/clientes/${input.client_id ?? ''}`);
   // La clave sale de aquí y de ningún otro sitio: no se escribe en una columna ni en un console.*.
   return { userId, clave, yaExistia: false };
 }
 
-/** Vincula el perfil a la marca: contacto si es cliente, asignación si es de la agencia. */
-async function vincularAMarca(
-  admin: ReturnType<typeof createServiceClient>,
-  input: { role: UserRole; client_id?: string },
-  profileId: string
-) {
+/**
+ * Vincula el perfil a la marca: contacto si es cliente, asignación si es de la agencia.
+ *
+ * Escribe con el cliente SUJETO A RLS, y ahí está el control. Las políticas
+ * `client_contacts_write` y `client_assignments_write` de 0010_aislamiento_por_agencia.sql exigen
+ * `is_agency() and has_client_access(client_id)`, y `has_client_access()` responde por agencia desde
+ * esa misma migración: la base de datos YA rechaza esta escritura. Con el cliente de servicio la
+ * fila entraba saltándose esa política, y eso era exactamente el agujero -- un administrador de la
+ * agencia A podía colgarse a sí mismo de una marca de la agencia B y, desde ese momento,
+ * `has_client_access()` le respondía que sí a todo lo de esa marca.
+ *
+ * El cliente de servicio sigue haciendo falta en `crearUsuario`, pero SOLO para
+ * `auth.admin.createUser` y para escribir `profiles.role` / `profiles.agency_id`, que son columnas
+ * sobre las que `authenticated` no tiene privilegio. Insertar una fila de vínculo no necesita nada
+ * de eso, y usarlo aquí era lo que ponía la autorización fuera de RLS. No lo vuelvas a meter: una
+ * comprobación escrita en la Server Action es una comprobación que el próximo camino puede olvidar
+ * replicar; una escritura que pasa por RLS la aplica la misma política que todo lo demás.
+ *
+ * Por eso el cliente NO es un parámetro: esta función crea el suyo. Cuando se recibía por
+ * parámetro, pasarle `admin` en la llamada volvía a abrir el agujero sin tocar este archivo ni su
+ * comentario -- y `npm run typecheck` no lo veía, porque `createServiceClient()` devuelve `any`
+ * (usa `require()`). Sin parámetro no hay por dónde colárselo, y quien quiera cambiarlo tiene que
+ * venir a editar justo aquí, debajo de este comentario.
+ */
+async function vincularAMarca(input: { role: UserRole; client_id?: string }, profileId: string) {
   if (!input.client_id) return;
+  const supabase = await createClient();
   const table = input.role === 'client' ? 'client_contacts' : 'client_assignments';
-  await admin.from(table).upsert({ client_id: input.client_id, profile_id: profileId }, { onConflict: 'client_id,profile_id' });
+  // El error SÍ se comprueba. Antes se descartaba el resultado entero, así que un vínculo que
+  // fallara -- por RLS o por cualquier otra cosa -- fallaba en silencio: quien creaba la cuenta
+  // veía una cuenta creada y daba por hecho que estaba conectada a la marca. Es el mismo fallo
+  // mudo de CN-015, las notificaciones que no llegaron durante meses.
+  const { error } = await supabase
+    .from(table)
+    .upsert({ client_id: input.client_id, profile_id: profileId }, { onConflict: 'client_id,profile_id' });
+  if (error) throw errorParaElCliente(error, 'crearUsuario:vincularAMarca');
 }
 
 export async function removeClientContact(clientId: string, profileId: string) {

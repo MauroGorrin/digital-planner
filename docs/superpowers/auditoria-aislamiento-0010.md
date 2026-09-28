@@ -210,12 +210,38 @@ sin aislar, y hay que decirlo en voz alta:**
 - `no puede borrar el adjunto de B`
 
 Se midió: revirtiendo `content_pieces_agency_update`, `content_pieces_agency_delete` y
-`attachments_agency_delete` a su `is_agency()` original, las tres siguen en **verde**. No es un fallo
-de las pruebas, es cómo funciona Postgres: un `UPDATE` o un `DELETE` con `where` tiene que **leer** la
-fila, así que se le aplica también la política de `SELECT` — y la de `SELECT` pasa por
-`has_client_access()`, que sí está aislada. Quitar el `.select()` de la llamada tampoco cambia nada;
-se probó. **Por la API no hay forma de que una prueba distinga la política de escritura de la de
-lectura.**
+`attachments_agency_delete` a su `is_agency()` original, las tres siguen en **verde**.
+
+**El porqué que daba antes esta sección era equivocado, aunque la conclusión se sostiene.** Decía que
+un `UPDATE` o un `DELETE` con `where` "tiene que leer la fila", y que por eso la política de escritura
+no puede distinguirse nunca de la de lectura. A nivel de SQL eso es falso: **la política de escritura
+sí es alcanzable sin la de lectura.** Se comprobó en la Postgres local con una tabla de juguete,
+`select using (false)` y `update using (true)`, como `authenticated`:
+
+| Sentencia | Resultado |
+|---|---|
+| `update t set texto = '...' where id = 1;` | `UPDATE 0` — con `where` se leen columnas, así que sí entra la política de `SELECT` |
+| `update t set texto = '...';` | `UPDATE 1` — **sin `where` no se lee ninguna columna, la de `SELECT` no entra, y decide sólo la de `UPDATE`** |
+
+Lo que tapa ese camino hoy no es Postgres: es **PostgREST**, que se niega a ejecutar una escritura sin
+filtro. Verificado contra la instancia local, y ni siquiera la clave de servicio lo esquiva:
+
+```
+UPDATE sin filtro  -> {"code":"21000", "message":"UPDATE requires a WHERE clause"}
+DELETE sin filtro  -> {"code":"21000", "message":"DELETE requires a WHERE clause"}
+```
+
+Así que la conclusión operativa no cambia — **por la API que usa la app no hay forma de que una prueba
+distinga la política de escritura de la de lectura**, y quitar el `.select()` de la llamada tampoco
+cambia nada; se probó —, pero el motivo es otro, y el motivo importa.
+
+**La consecuencia, escrita para que no haya que volver a deducirla:** el aislamiento de esas tres
+políticas se apoya hoy en un guard de PostgREST, no en las políticas mismas. Si ese guard deja de
+estar —una versión de PostgREST que no lo traiga, o una configuración que lo desactive— o si aparece
+una función `SECURITY INVOKER` que haga un `UPDATE` o un `DELETE` sin filtro (corre como quien llama,
+así que se le aplica la política de escritura y no la de lectura), esos tres caminos quedan
+expuestos **y ninguna prueba de esta suite se va a poner roja.** Quien toque cualquiera de las dos
+cosas tiene que volver a este párrafo.
 
 Lo que esas tres pruebas sí detectan: se ponen rojas en cuanto se revierte `has_client_access()`, que
 es la política que de verdad decide en ese camino. La versión acotada de las políticas de escritura
@@ -237,12 +263,46 @@ prueba se puso roja.
 
 ## 5. Lo que se encontró fuera de las políticas
 
-`lib/webhooks/dispatch.ts` corre con el **cliente de servicio**, que salta la RLS: ninguna política de
-este archivo lo alcanza. Enviaba cada evento a **todos** los webhooks activos, así que una pieza de la
-agencia A salía firmada y completa —título, copy, estado y marca— hacia el endpoint de Make de todas
-las demás agencias. Es una fuga entre inquilinos que además sale del producto. Se arregló ahí mismo:
-resuelve la agencia de la marca de la pieza y filtra por ella. Tiene dos pruebas unitarias nuevas.
+**Los sitios que llaman a `createServiceClient()` son TRES, no dos.** Esta sección enumeraba dos y se
+dejó fuera el tercero, que resultó ser el que tenía el agujero. El recuento completo,
+`grep -rn "createServiceClient" --include=*.ts --include=*.tsx` sin contar `lib/supabase/server.ts`
+(donde se define) ni los mocks de `tests/unit/`:
 
-No se tocó `lib/google-calendar/sync.ts`, que también usa el cliente de servicio: llega a la conexión
-**por el mapeo de la marca**, y el `with check` de `gcal_map_admin` impide desde este archivo que un
-mapeo apunte a la conexión de otra agencia.
+| Archivo | Para qué usa el cliente de servicio | Cómo queda acotado |
+|---|---|---|
+| `lib/webhooks/dispatch.ts` | Leer los webhooks activos y registrar la entrega | Resuelve la agencia de la marca de la pieza y filtra por ella **en el propio archivo** |
+| `lib/google-calendar/sync.ts` | Leer la conexión de Google y sus tokens | Llega a la conexión **por el mapeo de la marca**, y el `with check` de `gcal_map_admin` impide que un mapeo apunte a la conexión de otra agencia |
+| `app/admin-actions.ts` (`crearUsuario`) | `auth.admin.createUser` y el update de `profiles.role` / `profiles.agency_id` | **Sólo para eso.** El vínculo con la marca lo escribe `vincularAMarca` con el cliente sujeto a RLS, así que lo decide `client_contacts_write` / `client_assignments_write` |
+
+`lib/webhooks/dispatch.ts` enviaba cada evento a **todos** los webhooks activos, así que una pieza de
+la agencia A salía firmada y completa —título, copy, estado y marca— hacia el endpoint de Make de
+todas las demás agencias. Es una fuga entre inquilinos que además sale del producto. Se arregló ahí
+mismo y tiene dos pruebas unitarias nuevas.
+
+`app/admin-actions.ts` **no apareció en la auditoría original, y era el tercer sitio.** `crearUsuario`
+aceptaba `client_id` de quien llamara y no comprobaba de qué agencia era la marca; su ayudante
+`vincularAMarca` escribía la fila de `client_contacts` / `client_assignments` con el cliente de
+servicio, saltándose la política. Un administrador de la agencia A podía llamarla con su propio
+correo y el `client_id` de una marca de B: devolvía `{ yaExistia: true }` y dejaba escrita la
+pertenencia. A partir de ahí `has_client_access()` le respondía **que sí**, correctamente, y con eso
+leía marca, pieza, `copy_text`, adjuntos, comentarios y paquete de B; editaba y borraba su pieza;
+firmaba una URL de su adjunto; y reapuntaba su mapeo de calendario. Con `role: 'agency_member'` la
+fila caía en `client_assignments` y además empezaba a recibir sus notificaciones.
+
+**Ninguna política estaba rota:** se fabricaba la pertenencia por debajo de ellas. Es la misma clase
+que la fuga del webhook —un camino con cliente de servicio, fuera de RLS— y por eso el recuento de
+esta sección importa más que el de las demás.
+
+El arreglo **no** añade una comprobación paralela en la Server Action: quita el bypass.
+`vincularAMarca` escribe con `createClient()`, que es el cliente sujeto a RLS, y ya no lo recibe por
+parámetro —lo crea ella— para que no haya llamada desde la que volver a colarle el de servicio. La
+base de datos ya rechazaba esa escritura; lo único que hacía falta era dejar de rodearla. Además
+`crearUsuario` resuelve la marca **antes** de crear nada y rechaza si no es de su agencia: eso es un
+guard de usabilidad, no el control —sin él la cuenta de auth se creaba y el vínculo fallaba después,
+dejando un huérfano—, y `vincularAMarca` ya no se traga el error del upsert, que antes descartaba
+entero (CN-015 otra vez).
+
+Las pruebas viven en `tests/integration/aislamiento.test.ts` y **prueban la capa de la base de
+datos**, no la Server Action: esa suite habla con Postgres directamente y no puede importar un módulo
+`server-only`. Lo dice el propio archivo en el comentario de ese bloque, junto con lo que esa capa
+**no** cubre.
