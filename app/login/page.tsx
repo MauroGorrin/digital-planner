@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import { destinoSeguro } from '@/lib/url-segura';
 
@@ -82,7 +83,13 @@ function LoginForm() {
           </button>
         </form>
         <p className="mt-6 text-center text-xs text-slate-400">
-          ¿No tienes acceso? Pide a tu agencia que te invite.
+          ¿Eres cliente y no tienes acceso? Pide a tu agencia que te invite.
+        </p>
+        <p className="mt-2 text-center text-sm text-slate-500">
+          ¿Tienes una agencia?{' '}
+          <Link href="/registro" className="font-medium text-slate-700 underline">
+            Regístrala aquí
+          </Link>
         </p>
       </div>
     </main>

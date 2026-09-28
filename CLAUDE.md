@@ -70,6 +70,18 @@ el control.
 | Firma HMAC de webhooks (`X-Planner-Signature`) | `lib/webhooks/dispatch.ts` |
 | Fecha/hora con zona horaria del cliente | `lib/date-utils.ts`, `lib/tz.ts` |
 | Sesión y cliente de Supabase en servidor | `lib/supabase/server.ts` (`createClient` con cookies, `createServiceClient` con service role) |
+| Rutas públicas (sin sesión) | `lib/supabase/middleware.ts` — hoy `/login` y `/registro`. Agregar una ruta pública se hace ahí y solo ahí |
+| Validadores del alta pública | `lib/validacion-registro.ts` — los usan el formulario **y** la Server Action; una sola definición |
+| Promoción a administrador de agencia | `crear_mi_agencia()` en `supabase/migrations/0011_alta_de_agencia.sql` — el único camino de `client` a `agency_admin` que no pasa por el service role |
+
+**Camino de un alta pública.** `/registro` (`components/FormularioDeRegistro.tsx`) valida con
+`lib/validacion-registro.ts` → Server Action `registrarAgencia` en `app/registro-actions.ts`, que
+**vuelve a validar con las mismas funciones** y llama a `supabase.auth.signUp()` → Supabase manda el
+correo de confirmación → al confirmar, la persona cae en `/`, que reparte (`app/page.tsx`) y la
+manda a `/bienvenida` si le falta agencia → `completarAltaDeAgencia` →
+`supabase.rpc('crear_mi_agencia')`, que crea la agencia y fija `role`/`agency_id` **en el mismo
+update**. `/bienvenida` es idempotente y se puede volver a ella: un alta confirmada pero sin
+promover se termina desde ahí en vez de quedar en un callejón sin salida.
 
 ## Reglas de código
 
@@ -97,6 +109,15 @@ el control.
 | `SUPABASE_SERVICE_ROLE_KEY` | sí | `lib/supabase/server.ts` (`createServiceClient`) | Panel de Supabase → Settings → API (nunca al navegador) |
 | `NEXT_PUBLIC_APP_URL` | sí | notificaciones, webhooks, eventos de calendario | fijo en local: `http://localhost:3000` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | opcional (solo si se usa Google Calendar) | `app/api/google-calendar/*`, `lib/google-calendar/sync.ts` | Google Cloud Console |
+| `NEXT_PUBLIC_CAPTCHA_PROVIDER` / `NEXT_PUBLIC_CAPTCHA_SITE_KEY` | opcional (captcha del alta pública) | `lib/captcha.ts`, `components/Captcha.tsx`, `app/registro-actions.ts` | Cloudflare Turnstile o hCaptcha |
+
+**Sobre el captcha:** se enciende **solo si las dos variables están puestas** (`turnstile` o
+`hcaptcha` como proveedor). Sin ellas `/registro` funciona igual, sin widget — a propósito: el alta
+no puede depender de una clave que hoy nadie ha contratado, y la Supabase local de las pruebas no
+tiene captcha ni forma de tenerlo. **Las dos mitades van juntas:** estas variables solo dibujan el
+widget y mandan el token; quien lo *verifica* es el proyecto de Supabase, así que además hay que
+activar el mismo proveedor con su clave **secreta** en el panel (Authentication → Settings → Bot and
+Abuse Protection). Con una mitad sola, o no hay protección o el alta rebota.
 
 `.env.example` está commiteado y se mantiene sincronizado. `.env*` con valores reales nunca se
 commitea. `.env.test.local` (generado por `scripts/write-supabase-test-env.mjs` para
@@ -119,11 +140,26 @@ existente en `.gitignore`.
    `tests/unit/**` reemplacen los mocks por llamadas reales.
 5. Nunca marques una tarea terminada con el gate de comandos en rojo.
 6. Nunca commitees `.env`, `.env.local` ni ningún archivo con secretos reales.
-7. Nunca habilites el registro público (`enable_signup`) — ni en `supabase/config.toml` ni en el
-   panel de Supabase. El alta la hace solo un administrador de agencia, vía `crearUsuario` con el
-   service role, que crea la cuenta con una clave generada y la muestra una sola vez. Con el
-   registro abierto, `/auth/v1/signup` es un endpoint público que crea perfiles, y el rol de un
-   perfil decide toda la autorización del producto.
+7. **El registro público está abierto en local y cerrado en producción, y esos dos sitios son
+   independientes.**
+   - `supabase/config.toml` configura **solo la Supabase local** (`supabase start` /
+     `supabase db reset`), que es donde corren `npm run test:integration` y el desarrollo. Ahí
+     `enable_signup = true` desde `0011_alta_de_agencia.sql`, porque `/registro` y sus pruebas
+     necesitan que `/auth/v1/signup` responda.
+   - **Producción vive en el panel de Supabase** (Authentication → Sign In / Providers) y **nada de
+     este repositorio la cambia**. Sigue cerrada. Abrirla es una decisión del dueño, posterior a su
+     propia auditoría de aislamiento; no la tomes por él ni se la propongas como un paso pendiente.
+     Mientras el panel diga `false`, `/registro` se dibuja y el alta devuelve error: ese es el
+     estado esperado, no un bug.
+   - Lo que hace que abrirlo deje de ser la vulnerabilidad de `0007`: el alta pública **no reparte
+     permisos**. `handle_new_user()` crea todo perfil como `'client'` sin agencia y no lee el rol de
+     `raw_user_meta_data` (no la toques). La promoción a `agency_admin` pasa por
+     `crear_mi_agencia()` (`0011_alta_de_agencia.sql`), que vuelve a comprobar en la base las tres
+     precondiciones — ser `client`, no tener `agency_id`, y **no ser contacto de ninguna marca** —
+     y crea una agencia **vacía**, no acceso a la de nadie más.
+   - La confirmación de correo está **encendida en producción y tiene que seguir así**: es lo único
+     que prueba que la dirección es de quien se registra. En local está apagada porque
+     `[local_smtp]` no está levantado y no habría enlace que entregar.
 8. Nunca cambies `profiles.role`, `profiles.agency_id`, `clients.agency_id`,
    `content_pieces.status`, `ideas.status`, el `client_id` de una pieza o de una idea, ni el
    `agency_id` de una conexión de Google o de un webhook con un `update` desde la app.

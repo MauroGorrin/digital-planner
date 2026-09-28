@@ -31,14 +31,29 @@ enabled = true
 site_url = "http://localhost:3000"
 additional_redirect_urls = ["http://localhost:3000"]
 jwt_expiry = 3600
-# El producto no tiene alta publica (ver app/login/page.tsx): la hace crearUsuario con el
-# service role, que no pasa por esta opcion. Dejarla en true no habilita ninguna funcion del
-# producto y si abre el endpoint publico /auth/v1/signup. Espejo de lo que debe estar en el panel
-# de Supabase en produccion; si aca dice false y alla true, manda el panel.
-enable_signup = false
+# ESTE ARCHIVO CONFIGURA SOLO LA SUPABASE LOCAL (`supabase start` / `supabase db reset`), que es
+# donde corren `npm run test:integration` y el desarrollo. NO configura produccion: alla
+# `enable_signup` vive en el panel de Supabase (Authentication -> Sign In / Providers) y NO lo
+# cambia nada de este repositorio.
+#
+# Aca esta en true desde el paso 3 del spec (el alta publica de agencia, /registro): la pagina y sus
+# pruebas necesitan que `/auth/v1/signup` responda en la instancia local, y una instancia local es
+# de usar y tirar. El alta ya no reparte permisos -- `handle_new_user()` crea todo perfil como
+# 'client' desde 0007 y la promocion a administrador pasa por `crear_mi_agencia()`
+# (0011_alta_de_agencia.sql), que comprueba quien la pide.
+#
+# EN PRODUCCION SIGUE CERRADO, y abrirlo es una decision del dueno que va despues de su propia
+# auditoria, no un paso de esta entrega. Mientras el panel diga false, /registro se dibuja pero el
+# alta devuelve error: es el estado esperado.
+enable_signup = true
 
 [auth.email]
-enable_signup = false
+enable_signup = true
+# Apagada SOLO en local, y no por descuido: [local_smtp] esta desactivado mas arriba, asi que no hay
+# servidor de correo que entregue el enlace de confirmacion. Con esto en true, cada alta de prueba
+# crea cuentas que no podrian iniciar sesion jamas y no habria correo que las rescatara.
+# EN PRODUCCION ESTA ENCENDIDA y tiene que seguir asi: el correo es el unico de los seis campos del
+# registro que queda PROBADO, y sin confirmacion cualquiera se da de alta con la direccion de otro.
 enable_confirmations = false
 
 [storage]

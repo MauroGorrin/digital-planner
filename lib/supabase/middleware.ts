@@ -35,7 +35,15 @@ export async function updateSession(request: NextRequest) {
   // lista significa que quien anada app/api/webhooks/** manana hereda un endpoint SIN AUTENTICAR
   // por omision, sin haberlo decidido. Cuando exista esa ruta, volvera aqui junto con su propia
   // verificacion de firma, no antes.
-  const isPublic = path.startsWith('/login') || path.startsWith('/_next');
+  //
+  // `/registro` es la segunda ruta publica, desde el paso 3 del spec (el alta de agencia). Sin
+  // ponerla aqui el middleware manda a `/login` a quien viene a registrarse, que es el bucle que
+  // deja el alta inalcanzable: para registrarte tendrias que tener ya una cuenta.
+  //
+  // Abrir esta ruta NO abre el alta por si solo: el endpoint `/auth/v1/signup` lo abre
+  // `enable_signup` en el proyecto de Supabase, y en produccion eso vive en el panel. Ver la regla
+  // 7 de CLAUDE.md.
+  const isPublic = path.startsWith('/login') || path.startsWith('/registro') || path.startsWith('/_next');
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
@@ -44,7 +52,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && path === '/login') {
+  // Quien ya tiene sesion no ve ni el login ni el registro. En `/registro` no es cosmetico: el
+  // formulario llama a `signUp()`, que con una sesion abierta ni crea una cuenta ni avisa de forma
+  // util. Se le manda a `/`, que reparte segun su perfil (app/page.tsx) -- asi, si su alta quedo a
+  // medias, termina en /bienvenida en vez de en un calendario que no puede usar.
+  if (user && (path === '/login' || path === '/registro')) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
