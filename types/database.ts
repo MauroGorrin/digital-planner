@@ -176,6 +176,12 @@ export interface StatusHistoryEntry {
 export interface WebhookConfig {
   id: string;
   name: string;
+  /**
+   * No es anulable: un webhook siempre pertenece a una agencia (`not null` en la base desde
+   * `0010_aislamiento_por_agencia.sql`). La columna tiene `default mi_agencia()`, así que la app no
+   * la manda al crear el webhook — la deduce la base de la sesión, y así no se puede falsificar.
+   */
+  agency_id: string;
   url: string;
   active: boolean;
   events: string[];

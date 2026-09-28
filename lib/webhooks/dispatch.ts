@@ -34,14 +34,35 @@ interface DispatchPayload {
  */
 export async function dispatchWebhookEvent(payload: DispatchPayload) {
   const supabase = createServiceClient();
+
+  // La agencia dueña de la marca de la pieza. Se resuelve aquí y no se recibe por parámetro porque
+  // quien llama es una Server Action -- un endpoint HTTP -- y un `agency_id` que viajara en la
+  // llamada sería un dato que el navegador puede cambiar.
+  //
+  // POR QUÉ ESTO NO ES OPCIONAL: esta función corre con el cliente de SERVICIO, que salta la RLS. El
+  // aislamiento de `0010_aislamiento_por_agencia.sql` no la alcanza. Sin este filtro, una pieza de la
+  // agencia A se enviaba, firmada y completa (título, copy, estado, marca), al endpoint de Make de
+  // TODAS las demás agencias -- una fuga entre inquilinos que además sale del producto.
+  const { data: marca } = await supabase
+    .from('clients')
+    .select('agency_id')
+    .eq('id', payload.client_id)
+    .maybeSingle();
+  const agencyId = marca?.agency_id as string | null | undefined;
+  // Sin agencia no hay a quién avisar. Se corta en vez de enviar a todos: en la duda no se manda.
+  if (!agencyId) return;
+
   const { data: configs } = await supabase
     .from('webhook_configs')
-    .select('id, url, secret, active, events')
+    .select('id, url, secret, active, events, agency_id')
     .eq('active', true);
 
   if (!configs || configs.length === 0) return;
 
-  const relevant = configs.filter((c: { events: string[] }) => c.events.includes(payload.event));
+  const relevant = configs.filter(
+    (c: { events: string[]; agency_id?: string | null }) =>
+      c.agency_id === agencyId && c.events.includes(payload.event)
+  );
   const body = JSON.stringify(payload);
 
   await Promise.all(

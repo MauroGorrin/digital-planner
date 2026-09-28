@@ -44,7 +44,10 @@ envía a Make) y, si aplica, a `lib/google-calendar/sync.ts` (crea/actualiza el 
 (`submit_for_review`, `approve_content_piece`, `request_changes`, `mark_scheduled`,
 `mark_published`, `cancel_content_piece`, `reschedule_content_piece`) es `SECURITY DEFINER` y
 valida el rol/pertenencia del llamador con `is_agency()` / `has_client_access()` antes de escribir.
-RLS además aísla cada tabla por cliente. Nunca dupliques esa lógica de permisos en el cliente
+RLS además aísla cada tabla por cliente **y por agencia**: desde
+`0010_aislamiento_por_agencia.sql`, `has_client_access(marca)` responde "soy personal de agencia DE
+ESTA marca, o contacto de ella", y `mi_agencia()` es con lo que se compara todo lo que cuelga de una
+agencia y no de una marca. Nunca dupliques esa lógica de permisos en el cliente
 (Server Component o Server Action) como si fuera la fuente de verdad — es una comodidad de UI, no
 el control.
 
@@ -122,26 +125,33 @@ existente en `.gitignore`.
    registro abierto, `/auth/v1/signup` es un endpoint público que crea perfiles, y el rol de un
    perfil decide toda la autorización del producto.
 8. Nunca cambies `profiles.role`, `profiles.agency_id`, `clients.agency_id`,
-   `content_pieces.status`, `ideas.status` ni el `client_id` de una pieza o de una idea con un
-   `update` desde la app. `0009_agencias.sql` (que sustituye al bloque de
-   `0007_endurecimiento_privilegios.sql`) le quitó a `authenticated` el permiso sobre esas
-   columnas, así que el intento falla con `42501`: el único camino son las funciones
+   `content_pieces.status`, `ideas.status`, el `client_id` de una pieza o de una idea, ni el
+   `agency_id` de una conexión de Google o de un webhook con un `update` desde la app.
+   `0010_aislamiento_por_agencia.sql` (que sustituye al bloque de `0009_agencias.sql`, que a su vez
+   sustituía al de `0007_endurecimiento_privilegios.sql`) le quitó a `authenticated` el permiso
+   sobre esas columnas, así que el intento falla con `42501`: el único camino son las funciones
    `SECURITY DEFINER` y el cliente de servicio.
 
-## Si agregas una columna a `profiles`, `clients`, `content_pieces` o `ideas`
+9. Nunca autorices una fila con `is_agency()` o `is_agency_admin()` a secas. Las dos responden "soy
+   personal de agencia", una pregunta sin marca y por lo tanto sin aislamiento. Acompáñalas siempre
+   de `has_client_access(<fila>.client_id)` si la fila cuelga de una marca, o de una comparación
+   contra `mi_agencia()` si cuelga de una agencia. El porqué de cada sitio existente está en
+   `docs/superpowers/auditoria-aislamiento-0010.md`; si agregas uno nuevo, agrégale su fila.
 
-El bloque de privilegios de columna — hoy en `0009_agencias.sql`, antes en
-`0007_endurecimiento_privilegios.sql` — revoca el permiso de tabla y lo vuelve a otorgar **columna
-por columna**, excluyendo las protegidas. Eso tiene un costo que conviene conocer antes de toparse
-con él: **una columna nueva nace sin permiso para `authenticated`, y la app no podrá escribirla**
-hasta que el bloque se vuelva a ejecutar. La lista se calcula dinámicamente desde `pg_attribute`,
-así que re-aplicarlo es todo el arreglo.
+## Si agregas una columna a `profiles`, `clients`, `content_pieces`, `ideas`, `google_calendar_connections` o `webhook_configs`
 
-**Re-aplica `0009_agencias.sql`, no `0007`.** `0009` reejecuta el mismo bloque con el conjunto
-protegido ampliado (`profiles.agency_id` y `clients.agency_id` se suman a lo que ya protegía
-`0007`), así que **volver a pegar `0007` después de `0009` deshace esas dos protecciones** y deja a
-cualquier usuario cambiarse de agencia o mudar una marca a otra. Si agregas una columna que haya
-que proteger, agrégala a la lista de `0009`.
+El bloque de privilegios de columna — hoy en `0010_aislamiento_por_agencia.sql`, antes en `0009` y
+antes en `0007` — revoca el permiso de tabla y lo vuelve a otorgar **columna por columna**,
+excluyendo las protegidas. Eso tiene un costo que conviene conocer antes de toparse con él: **una
+columna nueva nace sin permiso para `authenticated`, y la app no podrá escribirla** hasta que el
+bloque se vuelva a ejecutar. La lista se calcula dinámicamente desde `pg_attribute`, así que
+re-aplicarlo es todo el arreglo.
+
+**Re-aplica `0010_aislamiento_por_agencia.sql`, no `0009` ni `0007`.** Cada uno reejecuta el mismo
+bloque con el conjunto protegido ampliado, así que **volver a pegar uno anterior deshace las
+protecciones nuevas en silencio**: `0009` no conoce `google_calendar_connections.agency_id` ni
+`webhook_configs.agency_id`, y `0007` tampoco conoce `profiles.agency_id` ni `clients.agency_id`. Si
+agregas una columna que haya que proteger, agrégala a la lista de `0010`.
 
 Si una escritura nueva falla con `42501` justo después de que agregaste una columna, esta es la
 causa y no un problema de RLS.

@@ -26,12 +26,25 @@ const fixturePiece: PayloadPiece = {
   copy_text: 'Ya viene algo nuevo.',
 };
 
-function mockSupabase(configs: Array<Record<string, unknown>>) {
+/** La agencia dueña de `fixturePiece.client_id`. Los webhooks de `activeConfig` cuelgan de ella. */
+const AGENCIA = 'agency-1';
+
+function mockSupabase(configs: Array<Record<string, unknown>>, agencyIdDeLaMarca: string | null = AGENCIA) {
   const insert = vi.fn().mockResolvedValue({ data: null, error: null });
   const client = {
     from: vi.fn((table: string) => {
       if (table === 'webhook_configs') {
         return { select: () => ({ eq: () => Promise.resolve({ data: configs }) }) };
+      }
+      // `clients` resuelve de qué agencia es la marca de la pieza: desde 0010 el envío sólo alcanza
+      // a los webhooks de esa agencia, y esta función corre con el cliente de servicio, que salta la
+      // RLS y por lo tanto no queda cubierta por las políticas.
+      if (table === 'clients') {
+        return {
+          select: () => ({
+            eq: () => ({ maybeSingle: () => Promise.resolve({ data: { agency_id: agencyIdDeLaMarca } }) }),
+          }),
+        };
       }
       return { insert };
     }),
@@ -40,8 +53,15 @@ function mockSupabase(configs: Array<Record<string, unknown>>) {
   return { insert };
 }
 
-function activeConfig(events: string[]) {
-  return { id: 'wh-1', url: 'https://example.com/hook', secret: SECRET, active: true, events };
+function activeConfig(events: string[], agencyId: string | null = AGENCIA) {
+  return {
+    id: 'wh-1',
+    url: 'https://example.com/hook',
+    secret: SECRET,
+    active: true,
+    events,
+    agency_id: agencyId,
+  };
 }
 
 function payloadFor(event: 'pieza_aprobada') {
@@ -115,6 +135,31 @@ describe('dispatchWebhookEvent', () => {
     await dispatchWebhookEvent(payloadFor('pieza_aprobada'));
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // Esta función corre con el cliente de servicio, que salta la RLS: el aislamiento de
+  // `0010_aislamiento_por_agencia.sql` no la cubre y el filtro tiene que estar aquí. Sin él, la pieza
+  // de una agencia salía firmada y completa hacia el endpoint de Make de todas las demás.
+  it('no envía la pieza de una agencia al webhook de otra', async () => {
+    const { insert } = mockSupabase([activeConfig(['pieza_aprobada'], 'agency-2')]);
+    const fetchMock = vi.fn().mockResolvedValue({ status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await dispatchWebhookEvent(payloadFor('pieza_aprobada'));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('no envía nada si no se puede resolver la agencia de la marca', async () => {
+    const { insert } = mockSupabase([activeConfig(['pieza_aprobada'])], null);
+    const fetchMock = vi.fn().mockResolvedValue({ status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await dispatchWebhookEvent(payloadFor('pieza_aprobada'));
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(insert).not.toHaveBeenCalled();
   });
 
   it('registra el error de red sin propagarlo cuando fetch falla', async () => {

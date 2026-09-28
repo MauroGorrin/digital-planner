@@ -12,10 +12,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  *   `agency_id`, y en el MISMO update que el rol — si lo partes en dos escrituras, la primera
  *   rebota con `23514`.
  *
- * Un fixture que se inventara su propia agencia haría fallar las pruebas de `agencias.test.ts`, que
- * comprueban que todo lo que hay en la base quedó en una sola agencia (criterio de aceptación 6 del
- * spec). Si alguna suite futura necesita de verdad una segunda agencia, créala ahí y no la pueble:
- * es lo que hace `agencias.test.ts` con su agencia señuelo.
+ * CUÁNDO NO USAR ESTO: `aislamiento.test.ts` monta sus DOS agencias por su cuenta y no pasa por
+ * aquí, a propósito. Probar que la agencia A no ve nada de la B exige dos agencias pobladas, y que
+ * ninguna sea la del backfill es lo que le permite a esa suite afirmar conjuntos exactos ("este
+ * contacto ve exactamente estas dos marcas") sin que se le cuelen las marcas que crean las demás
+ * suites, que sí cuelgan todas de la del backfill. Cualquier suite nueva que no necesite una segunda
+ * agencia debe seguir usando ésta: dos agencias sueltas por ahí no prueban nada y sí ensucian las
+ * afirmaciones de `agencias.test.ts`.
  */
 export async function agenciaDelBackfill(admin: SupabaseClient): Promise<string> {
   const { data, error } = await admin.from('agencies').select('id').eq('name', 'Agencia').single();

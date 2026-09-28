@@ -133,21 +133,27 @@ afterAll(async () => {
   if (ids.senuelo) await admin.from('agencies').delete().eq('id', ids.senuelo);
 });
 
+// ESTAS AFIRMACIONES SE ACOTARON AL LLEGAR 0010. Antes decían "toda marca está en la agencia del
+// backfill" y "todo el personal apunta a esa agencia", porque hasta el paso 1 ninguna suite tenía
+// motivo para crear una segunda agencia poblada. El paso 2 sí lo tiene: `aislamiento.test.ts` monta
+// dos agencias completas, que es la única forma de probar que A no ve nada de B, y con esas filas en
+// la base la versión antigua de estas dos pruebas fallaba por el fixture ajeno y no por un fallo del
+// backfill. Lo que el backfill garantiza de verdad sigue afirmado abajo: que no queda ni una marca
+// sin agencia, que no queda ni un perfil de agencia sin agencia, que ningún contacto de cliente
+// tiene una, y que las filas de ESTA suite están donde el backfill las dejó.
 describe('el backfill deja todo en una sola agencia', () => {
-  it('toda marca tiene agencia, y es la misma para todas', async () => {
+  it('toda marca tiene agencia, y la de esta suite es la del backfill', async () => {
     const { data, error } = await admin.from('clients').select('id, agency_id');
     if (error) throw error;
 
-    // No es una comprobación vacía aunque la columna sea `not null`: lo que se afirma es que no hay
-    // NINGUNA marca fuera de la agencia del backfill. Cualquier fixture de cualquier suite que se
-    // inventara su propia agencia hace caer esta prueba, que es justo el descuido que convertiría
-    // "una agencia" en "dos agencias a medias" en cuanto llegue el aislamiento del paso 2.
     expect(data?.length).toBeGreaterThan(0);
+    // `not null` en la columna ya lo impide, y por eso esto no es la parte que importa. La que sí:
+    // la marca de este fixture quedó en la agencia del backfill y no se inventó ninguna otra.
     expect((data ?? []).filter((c) => c.agency_id === null)).toEqual([]);
-    expect([...new Set((data ?? []).map((c) => c.agency_id))]).toEqual([idAgencia]);
+    expect((data ?? []).find((c) => c.id === ids.marca)?.agency_id).toBe(idAgencia);
   });
 
-  it('el personal de agencia apunta a esa agencia y los contactos de cliente no apuntan a ninguna', async () => {
+  it('el personal de agencia apunta a una agencia y los contactos de cliente no apuntan a ninguna', async () => {
     const { data, error } = await admin.from('profiles').select('id, role, agency_id');
     if (error) throw error;
 
@@ -155,7 +161,10 @@ describe('el backfill deja todo en una sola agencia', () => {
     const contactos = (data ?? []).filter((p) => p.role === 'client');
 
     expect(staff.length).toBeGreaterThan(0);
-    expect(staff.filter((p) => p.agency_id !== idAgencia)).toEqual([]);
+    // Un perfil de agencia sin agencia no tendría contra qué compararse en ninguna política de 0010,
+    // y ahí un nulo no niega el acceso: lo deja indefinido.
+    expect(staff.filter((p) => p.agency_id === null)).toEqual([]);
+    expect((data ?? []).find((p) => p.id === ids.agencia)?.agency_id).toBe(idAgencia);
     // La otra mitad de la regla, y no es simetría decorativa: un contacto con agencia quedaría
     // dentro del inquilino de una agencia sin que nadie lo hubiera invitado.
     expect(contactos.filter((p) => p.agency_id !== null)).toEqual([]);
