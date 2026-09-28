@@ -5,6 +5,8 @@ import 'server-only';
 // import accidental desde un componente de cliente mandaria la llave de servicio al navegador.
 // 'server-only' convierte ese error en un fallo de compilacion en vez de una fuga (CN-016).
 // Viene con Next; no agrega ninguna dependencia.
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
@@ -44,8 +46,8 @@ export async function createClient() {
 }
 
 /** Cliente con service role para operaciones de servidor (webhooks, Google Calendar). Nunca exponer al navegador. */
-export function createServiceClient() {
-  const { createClient: createSupabaseClient } = require('@supabase/supabase-js');
+export function createServiceClient(): SupabaseClient {
+  const { createClient: createSupabaseClient } = require('@supabase/supabase-js') as typeof import('@supabase/supabase-js');
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
