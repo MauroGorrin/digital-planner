@@ -7,6 +7,7 @@ import type { ClientBillingMode, ContentFormat, UserRole } from '@/types/databas
 import { errorParaElCliente } from '@/lib/errores';
 import { urlDeWebhookValidada } from '@/lib/webhooks/url-valida';
 import { generarClave } from '@/lib/clave';
+import { validarNombreDeAgencia } from '@/lib/validacion-registro';
 
 export async function createClientEntity(input: {
   name: string;
@@ -344,5 +345,24 @@ export async function deleteWebhookConfig(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('webhook_configs').delete().eq('id', id);
   if (error) throw errorParaElCliente(error, 'deleteWebhookConfig');
+  revalidatePath('/ajustes');
+}
+
+/**
+ * Le cambia el nombre a la agencia de quien llama.
+ *
+ * No recibe la agencia: la deduce `renombrar_mi_agencia()` en la base con `mi_agencia()`. Un id de
+ * agencia que viniera de aquí sería un id que el navegador puede cambiar. El control (ser
+ * `agency_admin`, largo y vacío) vive en esa función; lo de aquí es comodidad para que el mensaje
+ * salga antes y sin viaje a la base, con el MISMO validador que el alta (`validarNombreDeAgencia`).
+ */
+export async function renombrarMiAgencia(nombre: string) {
+  await requireAgencyAdmin();
+  const problema = validarNombreDeAgencia(String(nombre ?? ''));
+  if (problema) throw new Error(problema);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('renombrar_mi_agencia', { p_nombre: nombre });
+  if (error) throw errorParaElCliente(error, 'renombrarMiAgencia');
   revalidatePath('/ajustes');
 }

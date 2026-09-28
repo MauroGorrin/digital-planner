@@ -4,6 +4,7 @@ import { AppShell } from '@/components/AppShell';
 import { WebhookSettings } from '@/components/WebhookSettings';
 import { GoogleCalendarSettings } from '@/components/GoogleCalendarSettings';
 import { TeamInvite } from '@/components/TeamInvite';
+import { NombreDeAgencia } from '@/components/NombreDeAgencia';
 import type { Profile } from '@/types/database';
 
 // El callback de OAuth ya no reenvía el mensaje de Postgres en la URL, solo uno de estos códigos
@@ -23,10 +24,12 @@ export default async function AjustesPage(props: { searchParams: Promise<{ error
   const profile = await requireAgencyAdmin();
   const supabase = await createClient();
 
-  const [{ data: webhooks }, { data: connections }, { data: team }] = await Promise.all([
+  const [{ data: webhooks }, { data: connections }, { data: team }, { data: agencia }] = await Promise.all([
     supabase.from('webhook_configs').select('id,name,url,active,events,created_at').order('created_at', { ascending: false }),
     supabase.from('google_calendar_connections').select('id,label,calendar_id,created_at').order('created_at', { ascending: false }),
     supabase.from('profiles').select('*').in('role', ['agency_admin', 'agency_member']).order('full_name'),
+    // La política agencies_select (0010) sólo deja leer la fila propia; el filtro es por claridad.
+    supabase.from('agencies').select('name').eq('id', profile.agency_id ?? '').maybeSingle(),
   ]);
 
   return (
@@ -40,6 +43,8 @@ export default async function AjustesPage(props: { searchParams: Promise<{ error
         {searchParams.google === 'conectado' && (
           <p className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">Calendario de Google conectado correctamente.</p>
         )}
+
+        <NombreDeAgencia rol={profile.role} nombre={agencia?.name ?? ''} />
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
           <h2 className="mb-1 text-sm font-semibold text-slate-800">Equipo de la agencia</h2>

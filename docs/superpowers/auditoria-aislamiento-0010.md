@@ -124,6 +124,15 @@ con `grep`.
 Son 11 filas para 10 llamadas y 1 definición porque la línea `0001:306` y la `0001:355` llevan dos
 llamadas cada una (`using` y `with check`) y se auditan por separado.
 
+### Agregadas después de `0010`
+
+La regla 9 de `CLAUDE.md` pide una fila por cada sitio nuevo. El recuento de arriba es el de `0010` y
+no se toca; lo nuevo va aquí, con su archivo.
+
+| # | Archivo:línea | Qué es | Decisión | Por qué |
+|---|---|---|---|---|
+| 12 | `0012:69` | `renombrar_mi_agencia(p_nombre)` … `if not is_agency_admin() or v_agencia is null` | **`is_agency_admin()` + `where id = mi_agencia()`** (`0012:81`) | `is_agency_admin()` responde "¿puedes renombrar?" (un `agency_member` no); la fila la fija `v_agencia := mi_agencia()`, **que no es un parámetro**: no hay id de agencia que el navegador pueda cambiar, así que no hay comparación que olvidar. Es `SECURITY DEFINER` y no una política de `UPDATE` porque `agencies` no está en el bloque de privilegios de columna: `authenticated` tiene UPDATE de tabla sobre todas sus columnas y una política acotaría la fila pero no la columna (`id`, `created_at`…). La función escribe sólo `name`. Pruebas: `tests/integration/renombrar-agencia.test.ts`, que afirma que el nombre de B **sigue igual** después de que el administrador de A lo intenta por los tres caminos (parámetro colado, update directo, RPC legítima). |
+
 ### Los 3 `is_agency_admin(` en comentarios
 
 `0007:50` (la enumeración de `CN-001`), `0007:104` (por qué `guard_profile_role` puede llamarla sin
@@ -197,6 +206,12 @@ ver en vez de la verdad — a veces cerrando de más, a veces enredándose con l
 
 `guard_profile_role()` (`0007`) tampoco es `SECURITY DEFINER` — deliberadamente, y `0007` explica por
 qué — y ya está auditada en la tabla de `is_agency_admin()`.
+
+### Nuevas después de `0010`
+
+| Función | Archivo | Cómo queda acotada |
+|---|---|---|
+| `renombrar_mi_agencia(text)` | `0012_renombrar_agencia.sql` | Fila 12 de la tabla de `is_agency_admin()`: rol con `is_agency_admin()`, fila con `mi_agencia()`, columna fija (`name`). `EXECUTE` sólo para `authenticated`. |
 
 ---
 
