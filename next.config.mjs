@@ -70,12 +70,49 @@ const origenesSupabase = supabase ? `${supabase.origin} ${supabase.origenWs}` : 
  * `style-src` también lo conserva: Tailwind compila a un archivo, pero React escribe estilos inline
  * en atributos `style` y Next inyecta CSS inline en desarrollo.
  */
+/**
+ * Los orígenes del proveedor de captcha, y SOLO si hay uno configurado.
+ *
+ * Sin esto la CSP bloquea el script y el iframe del widget -- `script-src 'self'` y un `frame-src`
+ * que cae en `default-src 'self'` --, el formulario nunca recibe un token, y como `/login` exige el
+ * token cuando las variables están puestas, NADIE puede iniciar sesión. Pasó en producción el
+ * 2026-09-28: se pusieron las variables en Vercel y el login quedó bloqueado hasta un rollback. Las
+ * pruebas no lo vieron porque jsdom no aplica CSP.
+ *
+ * Se abre por proveedor y no "siempre a Cloudflare": sin captcha configurado la política queda
+ * exactamente como antes. Tiene que coincidir con `scriptDeCaptcha()` de `lib/captcha.ts`, que es de
+ * donde el componente carga el script; `tests/unit/csp.test.ts` falla si se desalinean.
+ *
+ * - Turnstile sirve script e iframe desde challenges.cloudflare.com (guía de CSP de Cloudflare).
+ * - hCaptcha carga el script de js.hcaptcha.com y dibuja el iframe desde otros subdominios de
+ *   hcaptcha.com, así que su guía pide el dominio y el comodín, también en style-src y connect-src.
+ */
+const ORIGENES_DE_CAPTCHA = {
+  turnstile: { script: ['https://challenges.cloudflare.com'], frame: ['https://challenges.cloudflare.com'], style: [], connect: [] },
+  hcaptcha: {
+    script: ['https://hcaptcha.com', 'https://*.hcaptcha.com'],
+    frame: ['https://hcaptcha.com', 'https://*.hcaptcha.com'],
+    style: ['https://hcaptcha.com', 'https://*.hcaptcha.com'],
+    connect: ['https://hcaptcha.com', 'https://*.hcaptcha.com'],
+  },
+};
+
+// Mismo criterio que lib/captcha.ts: el captcha existe solo si están las DOS variables.
+const proveedorDeCaptcha =
+  process.env.NEXT_PUBLIC_CAPTCHA_SITE_KEY && ORIGENES_DE_CAPTCHA[process.env.NEXT_PUBLIC_CAPTCHA_PROVIDER]
+    ? process.env.NEXT_PUBLIC_CAPTCHA_PROVIDER
+    : null;
+const captcha = proveedorDeCaptcha ? ORIGENES_DE_CAPTCHA[proveedorDeCaptcha] : null;
+const mas = (lista) => (lista && lista.length ? ' ' + lista.join(' ') : '');
+
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
+  `script-src 'self' 'unsafe-inline'${mas(captcha?.script)}`,
+  `style-src 'self' 'unsafe-inline'${mas(captcha?.style)}`,
   `img-src 'self' data: blob:${supabase ? ' ' + supabase.origin : ''}`,
-  `connect-src 'self'${origenesSupabase ? ' ' + origenesSupabase : ''}`,
+  `connect-src 'self'${origenesSupabase ? ' ' + origenesSupabase : ''}${mas(captcha?.connect)}`,
+  // Sin captcha no se declara: cae en default-src 'self', como siempre.
+  ...(captcha ? [`frame-src 'self'${mas(captcha.frame)}`] : []),
   "font-src 'self' data:",
   // Las URLs firmadas de los adjuntos se abren en <video>/<audio> y en iframes de previsualización
   // del propio Storage, todo bajo el origen de Supabase.
