@@ -46,6 +46,17 @@ export function FormularioDeRegistro() {
   const [enviando, setEnviando] = useState(false);
   const [listo, setListo] = useState<'confirmar' | 'entrar' | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  // Un token de captcha sirve UNA vez, y Supabase lo gasta aunque el alta falle (correo ya usado,
+  // contrasena rechazada). Tras un intento fallido hay que remontar el widget para que emita uno
+  // nuevo; si no, el reintento rebota por el captcha y no por lo que de verdad hay que corregir.
+  // Mismo arreglo que app/login/page.tsx.
+  const [intentoDeCaptcha, setIntentoDeCaptcha] = useState(0);
+
+  function renovarCaptcha() {
+    if (!captchaToken) return;
+    setCaptchaToken(null);
+    setIntentoDeCaptcha((n) => n + 1);
+  }
 
   function cambiar(campo: CampoDeRegistro, valor: string) {
     setDatos((previo) => ({ ...previo, [campo]: valor }));
@@ -74,12 +85,14 @@ export function FormularioDeRegistro() {
     try {
       const resultado = await registrarAgencia({ ...datos, captchaToken });
       if (!resultado.ok) {
+        renovarCaptcha();
         if (resultado.errores) setErrores(resultado.errores);
         if (resultado.mensaje) setMensaje(resultado.mensaje);
         return;
       }
       setListo(resultado.necesitaConfirmacion ? 'confirmar' : 'entrar');
     } catch {
+      renovarCaptcha();
       setMensaje('No pudimos crear tu cuenta. Inténtalo de nuevo en un momento.');
     } finally {
       setEnviando(false);
@@ -149,7 +162,7 @@ export function FormularioDeRegistro() {
         autoComplete="organization"
       />
 
-      <Captcha onToken={setCaptchaToken} />
+      <Captcha key={intentoDeCaptcha} onToken={setCaptchaToken} />
 
       {mensaje && (
         <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">

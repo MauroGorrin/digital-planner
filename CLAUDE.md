@@ -27,7 +27,7 @@ Versiones de dependencias viven en `package-lock.json` — léelo, nunca las adi
 
 ## Stack
 
-Next.js 14 (App Router, Server Actions) · TypeScript 5.5 (strict) · Tailwind CSS 3.4 · Supabase
+Next.js 15 (App Router, Server Actions; `cookies()`, `params` y `searchParams` son asíncronos, y `createClient()` de `lib/supabase/server.ts` también — siempre `await createClient()`) · TypeScript 5.5 (strict) · Tailwind CSS 3.4 · Supabase
 (Postgres + Auth + Storage + Realtime, con Row Level Security) · Vitest 5 + jsdom + Testing Library
 para pruebas · GitHub Actions para CI · Vercel para hosting.
 
