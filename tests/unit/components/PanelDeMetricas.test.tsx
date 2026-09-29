@@ -115,6 +115,71 @@ describe('PanelDeMetricas — selector de marca y editor según el rol', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument();
   });
 
+  it('como agencia con link y PDF disponibles, aparecen los dos botones de compartir', () => {
+    render(
+      <PanelDeMetricas
+        role="agency"
+        brands={[MARCA_UNO]}
+        selectedClientId={MARCA_UNO.id}
+        clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
+        anio={2026}
+        mes={9}
+        filas={[]}
+        paquete={[]}
+        linkDelReporte="https://app.ejemplo.com/reportes/client-1/2026/9?firma=abc"
+        linkDelPdf="https://app.ejemplo.com/api/reportes/pdf?client=client-1&anio=2026&mes=9&firma=abc"
+      />
+    );
+
+    expect(screen.getByRole('button', { name: 'Copiar link para compartir' })).toBeInTheDocument();
+    const enlacePdf = screen.getByRole('link', { name: 'Descargar PDF' });
+    expect(enlacePdf).toHaveAttribute(
+      'href',
+      'https://app.ejemplo.com/api/reportes/pdf?client=client-1&anio=2026&mes=9&firma=abc'
+    );
+  });
+
+  it('sin REPORT_LINK_SECRET configurada (linkDelReporte/linkDelPdf undefined), no aparece ningún botón de compartir', () => {
+    render(
+      <PanelDeMetricas
+        role="agency"
+        brands={[MARCA_UNO]}
+        selectedClientId={MARCA_UNO.id}
+        clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
+        anio={2026}
+        mes={9}
+        filas={[]}
+        paquete={[]}
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Copiar link para compartir' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Descargar PDF' })).not.toBeInTheDocument();
+  });
+
+  it('como cliente, no aparecen los botones de compartir aunque vengan los links (compartir es cosa de la agencia)', () => {
+    render(
+      <PanelDeMetricas
+        role="client"
+        brands={[MARCA_UNO]}
+        selectedClientId={MARCA_UNO.id}
+        clientName={MARCA_UNO.brand_name}
+        billingMode="paquete"
+        anio={2026}
+        mes={9}
+        filas={[]}
+        paquete={[]}
+        linkDelReporte="https://app.ejemplo.com/reportes/client-1/2026/9?firma=abc"
+        linkDelPdf="https://app.ejemplo.com/api/reportes/pdf?client=client-1&anio=2026&mes=9&firma=abc"
+      />
+    );
+
+    expect(screen.queryByRole('button', { name: 'Copiar link para compartir' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Descargar PDF' })).not.toBeInTheDocument();
+  });
+
   it('una marca libre no muestra el aviso de "paquete sin definir" ni el editor de cuotas', () => {
     const filas: FilaDeMetrica[] = [{ format: 'post', contratado: null, planificado: 5, entregado: 3 }];
 

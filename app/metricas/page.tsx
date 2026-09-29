@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { PanelDeMetricas, type MarcaOpcion } from '@/components/PanelDeMetricas';
 import { agregarMetricas, limitesDelMes, mesActualEn } from '@/lib/metricas';
+import { compartirReportesHabilitado, urlDelPdf, urlDelReporte } from '@/lib/reportes';
 import type { Client, ClientBillingMode, ClientPackage, ContentPiece } from '@/types/database';
 
 type MarcaConTz = MarcaOpcion & { timezone: string; billing_mode: ClientBillingMode };
@@ -86,6 +87,14 @@ export default async function MetricasPage(props: {
     (paquete ?? []) as Pick<ClientPackage, 'format' | 'monthly_quota'>[]
   );
 
+  // Compartir es cosa de la agencia (ver el porqué en PanelDeMetricas.tsx), y solo existe si el
+  // servidor tiene REPORT_LINK_SECRET puesta -- sin ella los dos quedan undefined y los botones
+  // de compartir simplemente no se dibujan, en vez de romper la pantalla entera.
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const compartir = esAgencia && compartirReportesHabilitado();
+  const linkDelReporte = compartir ? urlDelReporte(baseUrl, marcaSeleccionada.id, anio, mes) : undefined;
+  const linkDelPdf = compartir ? urlDelPdf(baseUrl, marcaSeleccionada.id, anio, mes) : undefined;
+
   return (
     <AppShell profile={profile}>
       <PanelDeMetricas
@@ -98,6 +107,8 @@ export default async function MetricasPage(props: {
         mes={mes}
         filas={filas}
         paquete={(paquete ?? []) as Pick<ClientPackage, 'format' | 'monthly_quota'>[]}
+        linkDelReporte={linkDelReporte}
+        linkDelPdf={linkDelPdf}
       />
     </AppShell>
   );
