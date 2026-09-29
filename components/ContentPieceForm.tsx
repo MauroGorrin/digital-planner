@@ -54,6 +54,10 @@ export function ContentPieceForm({
   // ofrecer "Ir a la pieza" en vez de dejar al usuario sin saber que ya fue creada.
   const [piezaCreada, setPiezaCreada] = useState<string | null>(null);
   const [reintentandoVinculo, setReintentandoVinculo] = useState(false);
+  // Se guarda en cuanto una serie recurrente termina con al menos una fila fallida, para que el
+  // botón de envío desaparezca (igual que el "yaHayResultado" de ContentPiecesMultipleForm) y no
+  // se pueda reenviar la misma serie -- reenviarla duplicaría las fechas que ya se crearon bien.
+  const [serieConFallas, setSerieConFallas] = useState<{ fecha: Date; mensaje: string }[] | null>(null);
   const [clientId, setClientId] = useState(piece?.client_id ?? defaultClientId ?? clients[0]?.id ?? '');
   const [platform, setPlatform] = useState<PlatformType>(piece?.platform ?? ideaOrigen?.suggested_platform ?? 'instagram');
   const [contentFormat, setContentFormat] = useState<ContentFormat>(piece?.format ?? ideaOrigen?.suggested_format ?? 'post');
@@ -78,6 +82,14 @@ export function ContentPieceForm({
       // "Repetir" ya activo, reescribirle los días marcados sería sorprender una elección propia.
       if (activando && diasSeleccionados.length === 0) {
         setDiasSeleccionados([new Date(scheduledAt).getDay()]);
+      }
+      // La sección de archivos se oculta al activar "Repetir" (no hay adjuntos en modo serie), y
+      // si no se limpia el estado acá los archivos elegidos antes quedan invisibles pero vivos:
+      // se pierden en silencio con una serie de más de una pieza, pueden bloquear el submit con
+      // un error sobre un archivo que ya no se ve, o se suben igual si la serie termina en una
+      // sola pieza. Se limpia solo al activar, sin intentar restaurarlos si se desmarca después.
+      if (activando) {
+        setArchivos([]);
       }
       return activando;
     });
@@ -121,6 +133,7 @@ export function ContentPieceForm({
     setLoading(true);
     setError(null);
     setPiezaCreada(null);
+    setSerieConFallas(null);
     try {
       const isoDate = new Date(scheduledAt).toISOString();
       if (piece) {
@@ -150,10 +163,29 @@ export function ContentPieceForm({
         }));
         const resultado = await createContentPieces(items);
         if (resultado.fallidas.length > 0) {
+          // Con nombre de fecha, no de índice -- un índice no le dice a la persona cuál de las
+          // piezas que veía en el resumen falló. fechasDeLaSerie[f.indice] es la misma fecha que
+          // se le mostró antes de enviar, en el mismo orden en que se armaron los ítems.
+          const fallidasConFecha = resultado.fallidas.map((f) => ({
+            fecha: fechasDeLaSerie[f.indice],
+            mensaje: f.mensaje,
+          }));
           setError(
             `Se crearon ${resultado.creadas.length} de ${items.length} piezas. ` +
-              `Fallaron: ${resultado.fallidas.map((f) => f.mensaje).join('; ')}`
+              `Fallaron: ${fallidasConFecha
+                .map((f) => `${f.fecha.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}: ${f.mensaje}`)
+                .join('; ')}`
           );
+          // Se marca la serie como fallida en vez de dejar el formulario reenviable: las fechas
+          // que ya están en `resultado.creadas` quedan creadas, y reenviar la misma serie (mismo
+          // título, mismos días, mismo botón habilitado) las duplicaría. El botón desaparece más
+          // abajo mientras `serieConFallas` no sea null -- igual que "yaHayResultado" en
+          // ContentPiecesMultipleForm.
+          setSerieConFallas(fallidasConFecha);
+          // No hay `router.refresh()` más abajo en este camino porque se sale con `return` antes
+          // de llegar a él (mismo motivo que el retorno de abajo): se llama acá para que, si la
+          // persona navega manualmente al calendario, vea las piezas que sí se crearon.
+          router.refresh();
           return;
         }
         router.push('/calendario');
@@ -462,17 +494,31 @@ export function ContentPieceForm({
         </div>
       )}
 
+      {serieConFallas && (
+        <div className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          <p>
+            Esta serie no se puede reenviar: reenviarla duplicaría las fechas que ya se crearon bien. Revisa el
+            calendario para ver qué quedó creado y arregla las que fallaron desde ahí.
+          </p>
+          <button type="button" onClick={() => router.push('/calendario')} className="mt-1 font-medium underline">
+            Ir al calendario
+          </button>
+        </div>
+      )}
+
       <div className="flex justify-end gap-2 pt-2">
         <button type="button" onClick={() => router.back()} className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">
-          Cancelar
+          {serieConFallas ? 'Volver' : 'Cancelar'}
         </button>
-        <button
-          type="submit"
-          disabled={loading || clients.length === 0}
-          className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
-        >
-          {loading ? 'Guardando…' : piece ? 'Guardar cambios' : 'Crear como borrador'}
-        </button>
+        {!serieConFallas && (
+          <button
+            type="submit"
+            disabled={loading || clients.length === 0}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700 disabled:opacity-60"
+          >
+            {loading ? 'Guardando…' : piece ? 'Guardar cambios' : 'Crear como borrador'}
+          </button>
+        )}
       </div>
     </form>
   );

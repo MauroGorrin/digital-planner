@@ -22,6 +22,15 @@ vi.mock('@/app/actions-ideas', () => ({
   vincularIdeaAPieza: vi.fn(),
 }));
 
+// ContentPieceForm importa createContentPieces incondicionalmente (para el camino de "Repetir",
+// que este archivo no ejercita -- eso lo cubre ContentPieceForm.recurrencia.test.tsx). Sin este
+// mock, Vitest carga el módulo real de @/app/actions-lote, que ahora importa requireAgency de
+// @/lib/auth, que a su vez importa @/lib/supabase/server: el mismo problema de "server-only" que
+// el comentario de arriba ya describe para @/app/actions-ideas.
+vi.mock('@/app/actions-lote', () => ({
+  createContentPieces: vi.fn(),
+}));
+
 // Se mantienen las validaciones y constantes reales (TIPOS_PERMITIDOS, validarArchivo, etc.) y
 // solo se sustituye subirArchivoAPieza, que dispara una subida real por XHR — exactamente lo que
 // una prueba unitaria no debe hacer.

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ContentPieceForm } from '@/components/ContentPieceForm';
 import { createContentPieces } from '@/app/actions-lote';
+import { fechasRecurrentes } from '@/lib/recurrencia';
 import type { Client } from '@/types/database';
 
 const push = vi.fn();
@@ -73,6 +74,38 @@ describe('ContentPieceForm — repetir esta pieza', () => {
     });
   });
 
+  it('elegir un archivo inválido y luego activar "Repetir" no bloquea el envío con un error sobre un archivo que ya no se ve', async () => {
+    vi.mocked(createContentPieces).mockResolvedValue({
+      creadas: [
+        { indice: 0, id: 'id-1' },
+        { indice: 1, id: 'id-2' },
+      ],
+      fallidas: [],
+    });
+
+    const { container } = render(<ContentPieceForm clients={crearClientes()} team={[]} defaultClientId="client-a" />);
+
+    fireEvent.change(screen.getByPlaceholderText('Ej. Lanzamiento colección primavera'), {
+      target: { value: 'Post semanal' },
+    });
+
+    // Un archivo de un tipo no permitido: si `archivos` no se limpia al activar "Repetir", la
+    // validación al inicio de handleSubmit lo sigue viendo (aunque la sección de archivos ya esté
+    // oculta) y bloquea el envío con un mensaje sobre un archivo que la persona ya no puede ver
+    // ni quitar del formulario.
+    const inputArchivo = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const archivoInvalido = new File(['contenido'], 'nota.txt', { type: 'text/plain' });
+    fireEvent.change(inputArchivo, { target: { files: [archivoInvalido] } });
+
+    fireEvent.click(screen.getByLabelText('Repetir esta pieza'));
+    fireEvent.change(screen.getByLabelText('¿Cuántas veces?'), { target: { value: '2' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear como borrador' }));
+
+    await waitFor(() => expect(createContentPieces).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/no permitido/i)).not.toBeInTheDocument();
+  });
+
   it('al editar una pieza (con la prop piece) no aparece la opción de repetir', () => {
     render(
       <ContentPieceForm
@@ -130,24 +163,47 @@ describe('ContentPieceForm — repetir esta pieza', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/calendario'));
   });
 
-  it('si createContentPieces devuelve alguna fila fallida, muestra el error y no navega', async () => {
+  it('si createContentPieces devuelve alguna fila fallida, nombra la fecha que falló, no navega, refresca y no deja reenviar', async () => {
     vi.mocked(createContentPieces).mockResolvedValue({
       creadas: [{ indice: 0, id: 'id-1' }],
       fallidas: [{ indice: 1, mensaje: 'No se pudo crear esta pieza.' }],
     });
 
-    render(<ContentPieceForm clients={crearClientes()} team={[]} defaultClientId="client-a" />);
+    const { container } = render(<ContentPieceForm clients={crearClientes()} team={[]} defaultClientId="client-a" />);
 
     fireEvent.change(screen.getByPlaceholderText('Ej. Lanzamiento colección primavera'), {
       target: { value: 'Post semanal' },
     });
     fireEvent.click(screen.getByLabelText('Repetir esta pieza'));
     fireEvent.change(screen.getByLabelText('¿Cuántas veces?'), { target: { value: '2' } });
+
+    // Se recalcula la misma serie que arma el componente (misma fecha base, mismo día de semana,
+    // misma cantidad) para saber cómo debería verse formateada la segunda fecha -- la que el
+    // resultado mockeado marca como fallida (índice 1) -- sin hardcodear "hoy".
+    const fechaInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    const fechaBase = new Date(fechaInput.value);
+    const fechasEsperadas = fechasRecurrentes(fechaBase, [fechaBase.getDay()], 2);
+    const fechaFallidaEsperada = fechasEsperadas[1].toLocaleDateString('es-MX', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+    });
+
     fireEvent.click(screen.getByRole('button', { name: 'Crear como borrador' }));
 
+    let bloqueError: HTMLElement;
     await waitFor(() => {
-      expect(screen.getByText(/Se crearon 1 de 2 piezas/)).toBeInTheDocument();
+      bloqueError = screen.getByText(/Se crearon 1 de 2 piezas/);
+      expect(bloqueError).toBeInTheDocument();
     });
+    // La fecha real, no solo el índice ni el mensaje genérico repetido sin contexto. Se compara
+    // dentro del bloque de error (no con getByText a secas) porque el mismo texto de fecha
+    // también aparece en el resumen "Se crearán 2 piezas: …" de más arriba.
+    expect(bloqueError!.textContent).toContain(fechaFallidaEsperada);
     expect(push).not.toHaveBeenCalledWith('/calendario');
+    expect(refresh).toHaveBeenCalled();
+    // El botón desaparece: reenviar la misma serie duplicaría la fecha que sí se creó (índice 0).
+    expect(screen.queryByRole('button', { name: 'Crear como borrador' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Ir al calendario' })).toBeInTheDocument();
   });
 });
