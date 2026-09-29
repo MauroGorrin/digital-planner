@@ -7,15 +7,10 @@ import type { Client, ContentFormat, PlatformType } from '@/types/database';
 import { FORMAT_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { createContentPieces } from '@/app/actions-lote';
 import { createClient } from '@/lib/supabase/client';
+import { fechaParaInputLocal } from '@/lib/date-utils';
 import { TAMANO_MAXIMO_BYTES, TIPOS_PERMITIDOS, formatearBytes, subirArchivoAPieza, validarArchivo } from '@/lib/attachments';
 
 const TOPE_DE_ARCHIVOS = 10;
-
-function ahoraLocal(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 interface FilaDeLote {
   archivo: File;
@@ -42,10 +37,17 @@ type EstadoDeFila =
  * pieza. Una fila con diez campos ya es densa; recortar los dos menos usados es lo que la mantiene
  * legible. Ver docs/superpowers/specs/2026-09-29-creacion-rapida-de-piezas-design.md.
  */
-export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
+export function ContentPiecesMultipleForm({
+  clients,
+  defaultClientId,
+}: {
+  clients: Client[];
+  /** Mismo prop que ya existe en /piezas/nueva -- una marca preseleccionada por la URL (`?client=`). */
+  defaultClientId?: string;
+}) {
   const router = useRouter();
   const supabase = createClient();
-  const [clientId, setClientId] = useState(clients[0]?.id ?? '');
+  const [clientId, setClientId] = useState(defaultClientId ?? clients[0]?.id ?? '');
   const [platform, setPlatform] = useState<PlatformType>('instagram');
   const [contentFormat, setContentFormat] = useState<ContentFormat>('post');
   const [filas, setFilas] = useState<FilaDeLote[]>([]);
@@ -75,7 +77,7 @@ export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
         return;
       }
     }
-    setFilas(archivos.map((archivo) => ({ archivo, title: '', copyText: '', scheduledAt: ahoraLocal() })));
+    setFilas(archivos.map((archivo) => ({ archivo, title: '', copyText: '', scheduledAt: fechaParaInputLocal() })));
   }
 
   function actualizarFila(indice: number, cambios: Partial<Omit<FilaDeLote, 'archivo'>>) {

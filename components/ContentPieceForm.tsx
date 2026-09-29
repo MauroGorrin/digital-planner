@@ -9,6 +9,7 @@ import { createContentPieces } from '@/app/actions-lote';
 import { fechasRecurrentes } from '@/lib/recurrencia';
 import { vincularIdeaAPieza } from '@/app/actions-ideas';
 import { createClient } from '@/lib/supabase/client';
+import { fechaParaInputLocal } from '@/lib/date-utils';
 import {
   TAMANO_MAXIMO_BYTES,
   TIPOS_PERMITIDOS,
@@ -16,13 +17,6 @@ import {
   subirArchivoAPieza,
   validarArchivo,
 } from '@/lib/attachments';
-
-function toLocalInputValue(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function ContentPieceForm({
   clients,
@@ -64,7 +58,9 @@ export function ContentPieceForm({
   const [title, setTitle] = useState(piece?.title ?? ideaOrigen?.title ?? '');
   const [copyText, setCopyText] = useState(piece?.copy_text ?? ideaOrigen?.description ?? '');
   const [referenceLink, setReferenceLink] = useState(piece?.reference_link ?? '');
-  const [scheduledAt, setScheduledAt] = useState(toLocalInputValue(piece?.scheduled_at) || toLocalInputValue(new Date().toISOString()));
+  const [scheduledAt, setScheduledAt] = useState(
+    fechaParaInputLocal(piece?.scheduled_at ? new Date(piece.scheduled_at) : undefined)
+  );
   const [assigneeId, setAssigneeId] = useState(piece?.assignee_id ?? '');
 
   // "Repetir esta pieza" solo tiene sentido al crear (nunca al editar, piece es undefined) y no se
@@ -80,8 +76,16 @@ export function ContentPieceForm({
       // Al activar por primera vez, se marca el día de la fecha ya elegida -- es el día que la
       // persona ya escogió a propósito. No se vuelve a sincronizar después: si cambia la fecha con
       // "Repetir" ya activo, reescribirle los días marcados sería sorprender una elección propia.
-      if (activando && diasSeleccionados.length === 0) {
-        setDiasSeleccionados([new Date(scheduledAt).getDay()]);
+      // El campo de fecha se puede borrar a mano (no tiene guardas contra eso mientras se escribe),
+      // así que `scheduledAt` puede llegar vacío aquí; sin este guardia, new Date('').getDay() mete
+      // un NaN en diasSeleccionados. Array#includes trata NaN como igual a sí mismo, así que
+      // fechasRecurrentes() lo empareja consigo mismo en cada vuelta del bucle (Invalid
+      // Date.getDay() también es NaN) y termina devolviendo "cantidad" fechas inválidas -- un
+      // resumen sin sentido en pantalla, aunque no llega a romper el envío porque el campo de
+      // fecha es `required` y el navegador no deja mandar el formulario vacío.
+      if (activando && diasSeleccionados.length === 0 && scheduledAt) {
+        const dia = new Date(scheduledAt).getDay();
+        if (!Number.isNaN(dia)) setDiasSeleccionados([dia]);
       }
       // La sección de archivos se oculta al activar "Repetir" (no hay adjuntos en modo serie), y
       // si no se limpia el estado acá los archivos elegidos antes quedan invisibles pero vivos:
