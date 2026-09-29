@@ -142,12 +142,20 @@ export function CalendarBoard({
             </button>
           </div>
           {profile.role !== 'client' && (
-            <Link
-              href="/piezas/nueva"
-              className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
-            >
-              + Nueva pieza
-            </Link>
+            <div className="flex gap-2">
+              <Link
+                href="/piezas/nueva"
+                className="rounded-lg bg-brand-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+              >
+                + Nueva pieza
+              </Link>
+              <Link
+                href="/piezas/nueva-multiple"
+                className="rounded-lg bg-white px-3.5 py-2 text-sm font-semibold text-brand-700 ring-1 ring-brand-200 hover:bg-brand-50"
+              >
+                + Varias piezas
+              </Link>
+            </div>
           )}
         </div>
       </div>
