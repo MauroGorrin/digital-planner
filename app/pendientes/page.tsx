@@ -12,7 +12,7 @@ export default async function PendientesPage() {
     supabase
       .from('content_pieces')
       .select('*, clients(id,name,brand_name,timezone), assignee:profiles!content_pieces_assignee_id_fkey(id,full_name)')
-      .in('status', ['pendiente_revision', 'cambios_solicitados', 'aprobado', 'programado'])
+      .in('status', ['pendiente_revision_interna', 'pendiente_revision', 'cambios_solicitados', 'aprobado', 'programado'])
       .order('scheduled_at'),
     supabase
       .from('ideas')

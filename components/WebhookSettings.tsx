@@ -13,6 +13,7 @@ const ALL_EVENTS = [
   { key: 'fecha_cambiada', label: 'Cambia la fecha de publicación' },
   { key: 'pieza_programada', label: 'Pieza pasa a Programado' },
   { key: 'pieza_publicada', label: 'Pieza pasa a Publicado' },
+  { key: 'pieza_enviada_a_revision_interna', label: 'Pieza enviada a revisión interna' },
 ];
 
 export function WebhookSettings({ webhooks }: { webhooks: { id: string; name: string; url: string; active: boolean; events: string[] }[] }) {

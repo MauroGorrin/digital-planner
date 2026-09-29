@@ -92,7 +92,7 @@ cuatro sitios.
 | 47 | `0013:67` | `approve_internal_review` (función nueva) | **`is_agency_admin() and has_client_access(v_client)`** | El admin de otra agencia también tiene que rechazarse aquí — ser admin no basta, tiene que ser admin DE ESTA agencia. |
 | 48 | `0013:89` | `request_internal_changes` (función nueva) | **`is_agency_admin() and has_client_access(v_client)`** | Misma razón que la anterior. |
 
-Son 45 filas para 44 llamadas porque la fila 30 documenta una política que `0003` sustituyó y que ya
+Son 48 filas para 47 llamadas porque la fila 30 documenta una política que `0003` sustituyó y que ya
 no está viva: se incluye para que nadie la lea como un sitio sin auditar.
 
 ### Los 3 `is_agency(` que están en comentarios
