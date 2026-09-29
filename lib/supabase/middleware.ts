@@ -43,7 +43,19 @@ export async function updateSession(request: NextRequest) {
   // Abrir esta ruta NO abre el alta por si solo: el endpoint `/auth/v1/signup` lo abre
   // `enable_signup` en el proyecto de Supabase, y en produccion eso vive en el panel. Ver la regla
   // 7 de CLAUDE.md.
-  const isPublic = path.startsWith('/login') || path.startsWith('/registro') || path.startsWith('/_next');
+  //
+  // `/reportes` y `/api/reportes/pdf` son la tercera y cuarta ruta publica: el link compartible
+  // del reporte de metricas (lib/reportes.ts) y su descarga en PDF. No dependen de sesion -- se
+  // protegen con una firma HMAC en la propia URL, verificada dentro de cada ruta
+  // (verificarAccesoAReporte()), no con el login. Abrirlas aqui es lo que deja que alguien sin
+  // cuenta -- el cliente que recibe el link por WhatsApp -- las vea; sin RLS de por medio, porque
+  // ambas leen con el cliente de servicio, la firma ES el control de acceso.
+  const isPublic =
+    path.startsWith('/login') ||
+    path.startsWith('/registro') ||
+    path.startsWith('/reportes') ||
+    path.startsWith('/api/reportes/pdf') ||
+    path.startsWith('/_next');
 
   if (!user && !isPublic) {
     const url = request.nextUrl.clone();
