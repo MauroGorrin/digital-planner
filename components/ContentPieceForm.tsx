@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import type { Client, ContentFormat, ContentPiece, PlatformType, Profile } from '@/types/database';
 import { FORMAT_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { createContentPiece, updateContentPiece } from '@/app/actions';
+import { createContentPieces } from '@/app/actions-lote';
+import { fechasRecurrentes } from '@/lib/recurrencia';
 import { vincularIdeaAPieza } from '@/app/actions-ideas';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -61,6 +63,45 @@ export function ContentPieceForm({
   const [scheduledAt, setScheduledAt] = useState(toLocalInputValue(piece?.scheduled_at) || toLocalInputValue(new Date().toISOString()));
   const [assigneeId, setAssigneeId] = useState(piece?.assignee_id ?? '');
 
+  // "Repetir esta pieza" solo tiene sentido al crear (nunca al editar, piece es undefined) y no se
+  // ofrece junto a ideaOrigen: convertir una idea produce una pieza, no una serie, y combinar los
+  // dos casos no lo pidió nadie -- se deja fuera a propósito.
+  const [repetir, setRepetir] = useState(false);
+  const [diasSeleccionados, setDiasSeleccionados] = useState<number[]>([]);
+  const [cantidadDeRepeticiones, setCantidadDeRepeticiones] = useState(2);
+
+  function alternarRepetir() {
+    setRepetir((valor) => {
+      const activando = !valor;
+      // Al activar por primera vez, se marca el día de la fecha ya elegida -- es el día que la
+      // persona ya escogió a propósito. No se vuelve a sincronizar después: si cambia la fecha con
+      // "Repetir" ya activo, reescribirle los días marcados sería sorprender una elección propia.
+      if (activando && diasSeleccionados.length === 0) {
+        setDiasSeleccionados([new Date(scheduledAt).getDay()]);
+      }
+      return activando;
+    });
+  }
+
+  const DIAS_DE_LA_SEMANA: { valor: number; etiqueta: string }[] = [
+    { valor: 1, etiqueta: 'L' },
+    { valor: 2, etiqueta: 'M' },
+    { valor: 3, etiqueta: 'M' },
+    { valor: 4, etiqueta: 'J' },
+    { valor: 5, etiqueta: 'V' },
+    { valor: 6, etiqueta: 'S' },
+    { valor: 0, etiqueta: 'D' },
+  ];
+
+  function alternarDia(dia: number) {
+    setDiasSeleccionados((dias) => (dias.includes(dia) ? dias.filter((d) => d !== dia) : [...dias, dia]));
+  }
+
+  const fechasDeLaSerie =
+    repetir && scheduledAt && diasSeleccionados.length > 0
+      ? fechasRecurrentes(new Date(scheduledAt), diasSeleccionados, cantidadDeRepeticiones)
+      : [];
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!clientId) {
@@ -93,6 +134,29 @@ export function ContentPieceForm({
           assignee_id: assigneeId || null,
         });
         router.push(`/piezas/${piece.id}`);
+      } else if (repetir && fechasDeLaSerie.length > 1) {
+        // Serie recurrente: un ítem por fecha calculada, mismos campos salvo scheduled_at. Sin
+        // adjuntos (ver el porqué en el spec) y sin vínculo de idea -- "Repetir" no se ofrece
+        // junto a ideaOrigen (Step 3c).
+        const items = fechasDeLaSerie.map((fecha) => ({
+          client_id: clientId,
+          platform,
+          format: contentFormat,
+          title,
+          copy_text: copyText,
+          reference_link: referenceLink || undefined,
+          scheduled_at: fecha.toISOString(),
+          assignee_id: assigneeId || undefined,
+        }));
+        const resultado = await createContentPieces(items);
+        if (resultado.fallidas.length > 0) {
+          setError(
+            `Se crearon ${resultado.creadas.length} de ${items.length} piezas. ` +
+              `Fallaron: ${resultado.fallidas.map((f) => f.mensaje).join('; ')}`
+          );
+          return;
+        }
+        router.push('/calendario');
       } else {
         const id = await createContentPiece({
           client_id: clientId,
@@ -278,7 +342,62 @@ export function ContentPieceForm({
         />
       </div>
 
-      {!piece && (
+      {!piece && !ideaOrigen && (
+        <div className="rounded-lg border border-slate-200 p-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <input type="checkbox" checked={repetir} onChange={alternarRepetir} />
+            Repetir esta pieza
+          </label>
+          {repetir && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="mb-1 text-xs font-medium text-slate-600">Días de la semana</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {DIAS_DE_LA_SEMANA.map((d) => (
+                    <button
+                      key={d.valor}
+                      type="button"
+                      onClick={() => alternarDia(d.valor)}
+                      aria-pressed={diasSeleccionados.includes(d.valor)}
+                      className={`h-8 w-8 rounded-full text-xs font-semibold ${
+                        diasSeleccionados.includes(d.valor)
+                          ? 'bg-brand-600 text-white'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {d.etiqueta}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label htmlFor="cantidad-de-repeticiones" className="mb-1 block text-xs font-medium text-slate-600">
+                  ¿Cuántas veces?
+                </label>
+                <input
+                  id="cantidad-de-repeticiones"
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={cantidadDeRepeticiones}
+                  onChange={(e) => setCantidadDeRepeticiones(Math.min(12, Math.max(1, Number(e.target.value) || 1)))}
+                  className="w-20 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+                />
+              </div>
+              {fechasDeLaSerie.length > 0 && (
+                <p className="text-xs text-slate-500">
+                  Se crearán {fechasDeLaSerie.length} piezas:{' '}
+                  {fechasDeLaSerie
+                    .map((f) => f.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' }))
+                    .join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!piece && !repetir && (
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-700">
             Archivos (opcional)
