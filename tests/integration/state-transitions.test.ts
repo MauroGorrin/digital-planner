@@ -128,10 +128,21 @@ afterAll(async () => {
 });
 
 describe('transiciones de estado con SECURITY DEFINER', () => {
-  it('la agencia envía a revisión y queda registrado en status_history', async () => {
+  // Antes de 0014_endurecer_revision_interna.sql esta prueba llamaba directo a submit_for_review
+  // desde 'borrador'. Ese camino de un solo paso ya no existe -- submit_for_review ahora solo
+  // funciona desde 'cambios_solicitados' -- así que la prueba ejercita el camino real de dos pasos
+  // (submit_for_internal_review -> approve_internal_review) para dejar la pieza compartida en
+  // 'pendiente_revision', que es lo que las pruebas siguientes de este describe necesitan.
+  it('la agencia envía a revisión interna, un admin la aprueba, y queda registrado en status_history', async () => {
     const agencia = await sesionDe(correos.agencia);
 
-    const { error } = await agencia.rpc('submit_for_review', { p_content_piece_id: ids.pieza });
+    const { error: errorInterno } = await agencia.rpc('submit_for_internal_review', {
+      p_content_piece_id: ids.pieza,
+    });
+    expect(errorInterno).toBeNull();
+    expect(await estadoDeLaPieza()).toBe('pendiente_revision_interna');
+
+    const { error } = await agencia.rpc('approve_internal_review', { p_content_piece_id: ids.pieza });
     expect(error).toBeNull();
 
     expect(await estadoDeLaPieza()).toBe('pendiente_revision');

@@ -281,7 +281,12 @@ describe('las RPC de transición siguen funcionando', () => {
   it('la agencia todavía puede enviar a revisión y cancelar', async () => {
     const agencia = await sesionDe(correos.agencia);
 
-    const paraRevision = await crearPieza();
+    // 'cambios_solicitados' y no 'borrador': desde 0014_endurecer_revision_interna.sql,
+    // submit_for_review solo funciona para el reenvío tras cambios del cliente. Esta prueba es de
+    // PRIVILEGIO DE COLUMNA (que la RPC, dueña de `postgres`, siga pudiendo escribir `status`
+    // aunque `authenticated` lo tenga revocado) y no de la máquina de estados, así que el estado de
+    // origen solo importa en cuanto tiene que ser uno válido.
+    const paraRevision = await crearPieza(ids.marca, 'cambios_solicitados');
     const { error: errorRevision } = await agencia.rpc('submit_for_review', {
       p_content_piece_id: paraRevision,
     });

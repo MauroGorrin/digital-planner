@@ -698,12 +698,17 @@ describe('dentro de una agencia no cambia nada', () => {
   });
 
   it('un miembro de A mueve una pieza de A por la RPC', async () => {
+    // 'cambios_solicitados' y no el 'borrador' por defecto: desde
+    // 0014_endurecer_revision_interna.sql, submit_for_review solo funciona para el reenvío tras
+    // cambios del cliente. Esta prueba es sobre AISLAMIENTO por agencia (que un miembro de A siga
+    // pudiendo mover una pieza de A, asignada o no), no sobre la máquina de estados.
     const pieza = await insertar('content_pieces', {
       client_id: A.marcaSinAsignar,
       platform: 'instagram',
       format: 'post',
       title: 'Pieza para revisar',
       scheduled_at: enUnDia(),
+      status: 'cambios_solicitados',
       created_by: A.miembro,
     });
 

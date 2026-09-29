@@ -87,6 +87,10 @@ const ids = {
   adminA2: '',
   miembroA: '',
   adminB: '',
+  // Contacto de marcaA. Existe para las pruebas de 0014_endurecer_revision_interna.sql: la RLS de
+  // content_pieces_select/status_history_select y la comprobación de estado de
+  // approve_content_piece necesitan un cliente real, no solo personal de agencia.
+  contactoA: '',
   marcaA: '',
 };
 const correos = {
@@ -94,6 +98,7 @@ const correos = {
   adminA2: `revint-adminA2-${sufijo}@prueba.local`,
   miembroA: `revint-miembroA-${sufijo}@prueba.local`,
   adminB: `revint-adminB-${sufijo}@prueba.local`,
+  contactoA: `revint-contactoA-${sufijo}@prueba.local`,
 };
 
 beforeAll(async () => {
@@ -106,6 +111,7 @@ beforeAll(async () => {
   ids.adminA2 = await crearUsuario(correos.adminA2);
   ids.miembroA = await crearUsuario(correos.miembroA);
   ids.adminB = await crearUsuario(correos.adminB);
+  ids.contactoA = await crearUsuario(correos.contactoA);
 
   for (const [id, role, agencyId] of [
     [ids.adminA, 'agency_admin', ids.agenciaA],
@@ -116,6 +122,9 @@ beforeAll(async () => {
     const { error } = await admin.from('profiles').update({ role, agency_id: agencyId }).eq('id', id);
     if (error) throw error;
   }
+  // contactoA se queda con el rol por defecto que le da handle_new_user() ('client', sin agencia):
+  // es justo el perfil que necesita has_client_access() para resolver la rama de contacto y no la
+  // de agencia.
 
   ids.marcaA = await insertar('clients', {
     name: `Marca A ${sufijo}`,
@@ -127,11 +136,12 @@ beforeAll(async () => {
 
   // adminA queda asignado a marcaA; adminA2 NO -- es justo la asimetría que prueba el caso 9.
   await insertar('client_assignments', { client_id: ids.marcaA, profile_id: ids.adminA });
+  await insertar('client_contacts', { client_id: ids.marcaA, profile_id: ids.contactoA });
 });
 
 afterAll(async () => {
   if (ids.marcaA) await admin.from('clients').delete().eq('id', ids.marcaA);
-  for (const id of [ids.adminA, ids.adminA2, ids.miembroA, ids.adminB]) {
+  for (const id of [ids.adminA, ids.adminA2, ids.miembroA, ids.adminB, ids.contactoA]) {
     if (id) await admin.auth.admin.deleteUser(id);
   }
   const agencias = [ids.agenciaA, ids.agenciaB].filter(Boolean);
@@ -311,5 +321,130 @@ describe('submit_for_review (sin cambios) tras un rechazo del cliente', () => {
 
     expect(error).toBeNull();
     expect(await estadoDeLaPieza(pieza)).toBe('pendiente_revision');
+  });
+});
+
+// ==================================================================================================
+// 0014_endurecer_revision_interna.sql -- lo que encontró la revisión final cruzada de las 5 tareas:
+// el gate se podía esquivar por completo. Las pruebas de abajo son las que faltaban.
+// ==================================================================================================
+
+describe('submit_for_review ya NO es un bypass del gate (0014, hallazgo 2)', () => {
+  it('rechaza si la pieza está en borrador -- ya no manda al cliente sin pasar por revisión interna', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'borrador');
+    const miembro = await sesionDe(correos.miembroA);
+
+    const { error } = await miembro.rpc('submit_for_review', { p_content_piece_id: pieza });
+
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/cambios solicitados/i);
+    expect(await estadoDeLaPieza(pieza)).toBe('borrador');
+  });
+
+  it('rechaza si la pieza está en pendiente_revision_interna', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'pendiente_revision_interna');
+    const miembro = await sesionDe(correos.miembroA);
+
+    const { error } = await miembro.rpc('submit_for_review', { p_content_piece_id: pieza });
+
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/cambios solicitados/i);
+    expect(await estadoDeLaPieza(pieza)).toBe('pendiente_revision_interna');
+  });
+});
+
+describe('RLS: un contacto de cliente no ve la revisión interna (0014, hallazgo 3)', () => {
+  it('un select normal sobre content_pieces no devuelve una pieza en pendiente_revision_interna', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'pendiente_revision_interna');
+    const contacto = await sesionDe(correos.contactoA);
+
+    const { data, error } = await contacto.from('content_pieces').select('id').eq('id', pieza);
+
+    expect(error).toBeNull();
+    expect(data ?? []).toEqual([]);
+  });
+
+  it('no ve ninguna fila de status_history hacia o desde pendiente_revision_interna', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'borrador');
+    const miembro = await sesionDe(correos.miembroA);
+    const adminSesion = await sesionDe(correos.adminA);
+
+    // borrador -> pendiente_revision_interna -> borrador (con nota de corrección interna): las dos
+    // filas de historial que un contacto de cliente nunca debería poder leer.
+    const { error: errorEnvio } = await miembro.rpc('submit_for_internal_review', { p_content_piece_id: pieza });
+    expect(errorEnvio).toBeNull();
+    const { error: errorCorreccion } = await adminSesion.rpc('request_internal_changes', {
+      p_content_piece_id: pieza,
+      p_note: 'Corrige el tono antes de mandarla',
+    });
+    expect(errorCorreccion).toBeNull();
+
+    const contacto = await sesionDe(correos.contactoA);
+    const { data, error } = await contacto
+      .from('status_history')
+      .select('id, from_status, to_status')
+      .eq('content_piece_id', pieza);
+
+    expect(error).toBeNull();
+    expect(data ?? []).toEqual([]);
+  });
+
+  it('sigue viendo la pieza en cuanto pasa a pendiente_revision -- el arreglo no se pasó de amplio', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'pendiente_revision');
+    const contacto = await sesionDe(correos.contactoA);
+
+    const { data, error } = await contacto.from('content_pieces').select('id, status').eq('id', pieza);
+
+    expect(error).toBeNull();
+    expect(data).toHaveLength(1);
+    expect(data?.[0].status).toBe('pendiente_revision');
+  });
+});
+
+describe('approve_content_piece exige pendiente_revision (0014, hallazgo 4)', () => {
+  it('un contacto de cliente no puede aprobar una pieza todavía en revisión interna, aunque acierte el UUID', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'pendiente_revision_interna');
+    const contacto = await sesionDe(correos.contactoA);
+
+    // Esta prueba importa aparte de las de RLS de arriba: una función SECURITY DEFINER no pasa por
+    // las políticas de SELECT, así que "no la ve en una lista" y "no puede aprobarla por RPC" son
+    // dos capas distintas, y las dos tienen que estar cerradas.
+    const { error } = await contacto.rpc('approve_content_piece', { p_content_piece_id: pieza, p_note: 'ok' });
+
+    expect(error).not.toBeNull();
+    expect(error?.message).toMatch(/pendiente de revisión/i);
+    expect(await estadoDeLaPieza(pieza)).toBe('pendiente_revision_interna');
+  });
+});
+
+describe('secuencia completa borrador -> revisión interna -> revisión de cliente -> aprobado (0014, hallazgo 5)', () => {
+  it('recorre las tres transiciones reales contra Postgres y termina aprobada por el cliente', async () => {
+    const pieza = await crearPieza(ids.marcaA, 'borrador');
+    const miembro = await sesionDe(correos.miembroA);
+    const adminSesion = await sesionDe(correos.adminA);
+    const contacto = await sesionDe(correos.contactoA);
+
+    const { error: errorEnvio } = await miembro.rpc('submit_for_internal_review', { p_content_piece_id: pieza });
+    expect(errorEnvio).toBeNull();
+    expect(await estadoDeLaPieza(pieza)).toBe('pendiente_revision_interna');
+
+    const { error: errorAprobacionInterna } = await adminSesion.rpc('approve_internal_review', {
+      p_content_piece_id: pieza,
+    });
+    expect(errorAprobacionInterna).toBeNull();
+    expect(await estadoDeLaPieza(pieza)).toBe('pendiente_revision');
+
+    // Criterio de aceptación 3 del spec: approve_internal_review notifica a los contactos del
+    // cliente con el mismo evento "nuevo contenido para revisar" que usa submit_for_review -- hasta
+    // ahora solo se afirmaba indirectamente vía estado/historial, nunca vía la notificación misma.
+    const notisCliente = await notificacionesDe(ids.contactoA, 'pendiente_revision');
+    expect(notisCliente.some((n) => n.content_piece_id === pieza)).toBe(true);
+
+    const { error: errorAprobacionCliente } = await contacto.rpc('approve_content_piece', {
+      p_content_piece_id: pieza,
+      p_note: 'Se ve bien',
+    });
+    expect(errorAprobacionCliente).toBeNull();
+    expect(await estadoDeLaPieza(pieza)).toBe('aprobado');
   });
 });
