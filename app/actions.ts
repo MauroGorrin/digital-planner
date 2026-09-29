@@ -176,6 +176,50 @@ export async function submitForReview(id: string) {
   revalidatePath(`/piezas/${id}`);
 }
 
+export async function submitForInternalReview(id: string) {
+  const profile = await requireAgency();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('submit_for_internal_review', { p_content_piece_id: id });
+  if (error) throw errorParaElCliente(error, 'submitForInternalReview');
+  const piece = await loadPieceWithClient(id);
+  if (piece) {
+    await dispatchWebhookEvent(
+      buildWebhookPayload('pieza_enviada_a_revision_interna', piece, profile.full_name, getBaseUrl(), piece.clients.brand_name)
+    );
+  }
+  revalidatePath('/calendario');
+  revalidatePath('/pendientes');
+  revalidatePath(`/piezas/${id}`);
+}
+
+export async function approveInternalReview(id: string) {
+  const profile = await requireAgency();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('approve_internal_review', { p_content_piece_id: id });
+  if (error) throw errorParaElCliente(error, 'approveInternalReview');
+  const piece = await loadPieceWithClient(id);
+  if (piece) {
+    // Mismo evento que submitForReview: es el mismo momento semántico (el cliente se entera),
+    // solo que ahora se llega aquí después del visto bueno interno.
+    await dispatchWebhookEvent(
+      buildWebhookPayload('pieza_creada_revision', piece, profile.full_name, getBaseUrl(), piece.clients.brand_name)
+    );
+  }
+  revalidatePath('/calendario');
+  revalidatePath('/pendientes');
+  revalidatePath(`/piezas/${id}`);
+}
+
+export async function requestInternalChanges(id: string, note: string) {
+  await requireAgency();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('request_internal_changes', { p_content_piece_id: id, p_note: note });
+  if (error) throw errorParaElCliente(error, 'requestInternalChanges');
+  revalidatePath('/calendario');
+  revalidatePath('/pendientes');
+  revalidatePath(`/piezas/${id}`);
+}
+
 export async function approvePiece(id: string, note?: string) {
   const profile = await requireProfile();
   const supabase = await createClient();
