@@ -8,6 +8,7 @@ import { formatDateTimeInTz } from '@/lib/tz';
 
 export function PendingList({ profile, pieces, ideas }: { profile: Profile; pieces: ContentPiece[]; ideas: Idea[] }) {
   const now = Date.now();
+  const pendientesDeRevisionInterna = pieces.filter((p) => p.status === 'pendiente_revision_interna');
   const needsAttention = pieces.filter((p) => p.status === 'pendiente_revision' || p.status === 'cambios_solicitados');
   const upcoming = pieces
     .filter((p) => p.status === 'aprobado' || p.status === 'programado')
@@ -41,6 +42,15 @@ export function PendingList({ profile, pieces, ideas }: { profile: Profile; piec
             {esAgencia ? 'Ideas esperando respuesta del cliente' : 'Ideas esperando tu revisión'}
           </h2>
           <IdeaTable ideas={ideasPendientes} showClient={esAgencia} showStatus={esAgencia} />
+        </section>
+      )}
+
+      {esAgencia && pendientesDeRevisionInterna.length > 0 && (
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-slate-700">
+            Piezas esperando revisión interna ({pendientesDeRevisionInterna.length})
+          </h2>
+          <PieceTable pieces={pendientesDeRevisionInterna} showClient={esAgencia} />
         </section>
       )}
 

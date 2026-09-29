@@ -139,3 +139,29 @@ describe('PendingList — sección de ideas según el rol', () => {
     expect(screen.getByText('Pieza pendiente de revisión')).toBeInTheDocument();
   });
 });
+
+describe('PendingList — sección de revisión interna de piezas', () => {
+  it('una pieza en pendiente_revision_interna aparece en su propia sección, no en la de aprobación del cliente', () => {
+    const piezaInterna = crearPieza({ id: 'pieza-interna', title: 'Pieza en revisión interna', status: 'pendiente_revision_interna' });
+
+    render(<PendingList profile={crearPerfil({ role: 'agency_admin' })} pieces={[piezaInterna]} ideas={[]} />);
+
+    expect(screen.getByRole('heading', { name: 'Piezas esperando revisión interna (1)' })).toBeInTheDocument();
+    expect(screen.getByText('Pieza en revisión interna')).toBeInTheDocument();
+    expect(screen.getByText(/Pendientes de aprobación del cliente \(0\)/)).toBeInTheDocument();
+  });
+
+  it('sin ninguna pieza en pendiente_revision_interna, la sección no se renderiza', () => {
+    render(<PendingList profile={crearPerfil({ role: 'agency_admin' })} pieces={[]} ideas={[]} />);
+
+    expect(screen.queryByText(/Piezas esperando revisión interna/)).not.toBeInTheDocument();
+  });
+
+  it('como cliente, la sección nunca se muestra aunque llegara una pieza en ese estado', () => {
+    const piezaInterna = crearPieza({ id: 'pieza-interna', status: 'pendiente_revision_interna' });
+
+    render(<PendingList profile={crearPerfil({ role: 'client' })} pieces={[piezaInterna]} ideas={[]} />);
+
+    expect(screen.queryByText(/Piezas esperando revisión interna/)).not.toBeInTheDocument();
+  });
+});
