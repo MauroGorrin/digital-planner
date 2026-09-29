@@ -14,6 +14,7 @@ export type ContentFormat = 'post' | 'reel' | 'historia' | 'carrusel' | 'video' 
 
 export type ContentStatus =
   | 'borrador'
+  | 'pendiente_revision_interna'
   | 'pendiente_revision'
   | 'cambios_solicitados'
   | 'aprobado'
@@ -23,6 +24,7 @@ export type ContentStatus =
 
 export const STATUS_LABELS: Record<ContentStatus, string> = {
   borrador: 'Borrador',
+  pendiente_revision_interna: 'Revisión interna',
   pendiente_revision: 'Pendiente de revisión',
   cambios_solicitados: 'Cambios solicitados',
   aprobado: 'Aprobado',
@@ -33,6 +35,7 @@ export const STATUS_LABELS: Record<ContentStatus, string> = {
 
 export const STATUS_COLORS: Record<ContentStatus, string> = {
   borrador: 'bg-slate-200 text-slate-700',
+  pendiente_revision_interna: 'bg-violet-100 text-violet-800',
   pendiente_revision: 'bg-amber-100 text-amber-800',
   cambios_solicitados: 'bg-red-100 text-red-700',
   aprobado: 'bg-green-100 text-green-700',

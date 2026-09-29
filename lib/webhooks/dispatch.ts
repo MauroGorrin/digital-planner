@@ -9,7 +9,11 @@ export type WebhookEventType =
   | 'comentario_agregado'
   | 'fecha_cambiada'
   | 'pieza_programada'
-  | 'pieza_publicada';
+  | 'pieza_publicada'
+  // Se dispara al entrar a revisión interna (antes de que la vea el cliente). Nadie lo recibe
+  // salvo que lo agregue a mano al array `events` de su webhook -- ver
+  // docs/superpowers/specs/2026-09-29-revision-interna-de-piezas-design.md.
+  | 'pieza_enviada_a_revision_interna';
 
 interface DispatchPayload {
   event: WebhookEventType;
