@@ -18,6 +18,7 @@
     "db:test:stop": "npx supabase stop"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.9.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",
     "date-fns": "^3.6.0",
