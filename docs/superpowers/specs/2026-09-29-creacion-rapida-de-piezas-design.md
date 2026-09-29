@@ -4,6 +4,27 @@
 **Estado:** diseñado y aprobado por el usuario en conversación. Es el sub-proyecto **A** de la
 descomposición acordada (A → B → C → D) de la lista de sugerencias sobre `digital-planner`.
 
+**Corrección post-aprobación, antes de escribir el plan de implementación:** al leer el código para
+armar las tareas exactas aparecieron dos cosas que este documento tenía mal. Se corrigen aquí mismo
+en vez de esconderlas en el plan:
+
+1. **A1 (duplicar) ya está construido.** `duplicateContentPiece` (`app/actions.ts:106-133`) y su
+   botón "Duplicar" en `ContentPieceDetail.tsx:94-104` ya existen y funcionan: un clic, sin
+   formulario intermedio, copia cliente/plataforma/formato/título (con sufijo "(copia)")/copy/link/
+   responsable/**fecha**, y queda registrado en `duplicated_from` — columna que ya existe en
+   `content_pieces`. Es más simple que el flujo de formulario prellenado que se diseñó abajo y
+   satisface el mismo problema. **Se retira la sección A1 del alcance**: no se construye nada nuevo
+   para duplicar, se deja el botón existente tal cual.
+2. **La prueba de integración de `createContentPieces` no es viable como estaba escrita.**
+   `createContentPieces` es una Server Action y usa `createClient()` de `lib/supabase/server.ts`,
+   que depende de `cookies()` de `next/headers` — solo existe dentro de una request de Next, y
+   ninguna prueba de este proyecto llama a una Server Action directamente por eso (todas las de
+   `tests/integration/` hablan contra Postgres real con su propio cliente de sesión). Lo nuevo en
+   `createContentPieces` es la orquestación del lote — el bucle, el tope, que una fila fallida no
+   tumbe a las demás —, así que eso se prueba **unitario, mockeando `createContentPiece`**. El
+   aislamiento por agencia no es lógica nueva: lo hereda de la política `content_pieces_agency_write`
+   (`0010_aislamiento_por_agencia.sql:304-306`), ya endurecida y ya cubierta.
+
 ## El problema
 
 Quien lleva varias cuentas de contenido solo —el caso típico es un freelancer con 6-8 clientes—
@@ -20,8 +41,9 @@ costo es innecesario:
 
 ## Alcance
 
-**Dentro:** un botón para duplicar una pieza existente, una pantalla para crear varias piezas de una
-tanda de archivos, y una opción de repetición dentro del formulario de creación.
+**Dentro:** una pantalla para crear varias piezas de una tanda de archivos, y una opción de
+repetición dentro del formulario de creación. (Duplicar una pieza ya existe — ver la corrección al
+principio de este documento.)
 
 **Fuera, deliberadamente:**
 
@@ -39,8 +61,8 @@ tanda de archivos, y una opción de repetición dentro del formulario de creaci�
 Verificado contra el código, no asumido:
 
 - `ContentPieceForm` (`components/ContentPieceForm.tsx`) ya sirve para crear y editar con la misma
-  prop `piece` opcional, y ya sabe prellenarse desde una idea convertida vía la prop `ideaOrigen`
-  (líneas 27-42). El diseño de abajo agrega una prop hermana, `piezaOrigen`, con el mismo patrón.
+  prop `piece` opcional. La sección "Repetir esta pieza" de A3 se agrega junto al campo de fecha,
+  solo cuando no hay `piece` (modo creación).
 - `createContentPiece` (`app/actions.ts:32-60`) inserta con `status` en su default `'borrador'` — la
   columna no acepta que `authenticated` la escriba directamente desde `0007_endurecimiento_privilegios.sql`
   —, valida el link de referencia con `enlaceDeReferenciaValidado` y resuelve la agencia con
@@ -51,10 +73,6 @@ Verificado contra el código, no asumido:
 - `validarArchivo`, `TAMANO_MAXIMO_BYTES` (50 MB) y `TIPOS_PERMITIDOS` (`lib/attachments.ts:13-44`)
   ya validan cada archivo antes de subirlo. Se reutilizan sin cambios, archivo por archivo, en el
   lote.
-- `ideaSirveComoOrigenDePieza` y su uso en `app/piezas/nueva/page.tsx:22-25` ya resuelven el caso de
-  un enlace de origen que dejó de ser válido, degradando a un formulario en blanco en vez de romper
-  la página. `desde=<id>` (duplicar) usa el mismo patrón cuando la pieza de origen ya no es
-  accesible para quien la abre.
 
 No hace falta ninguna migración: las tres funciones reutilizan `content_pieces` y `attachments` tal
 cual están.
@@ -106,34 +124,7 @@ que borra trabajo válido porque una fila tuvo un problema.
 
 ### A1 — Duplicar pieza
 
-Un botón **"Duplicar"** junto a "Editar" en `ContentPieceDetail`, visible para los mismos roles que
-ya ven "Editar". Lleva a `/piezas/nueva?desde=<id>`.
-
-`NuevaPiezaPage` (`app/piezas/nueva/page.tsx`) carga la pieza de origen igual que hoy carga la idea
-de origen — con el cliente sujeto a RLS, así que una pieza de otra agencia simplemente no aparece —
-y pasa una nueva prop a `ContentPieceForm`:
-
-```ts
-piezaOrigen?: {
-  client_id: string;
-  platform: PlatformType;
-  format: ContentFormat;
-  title: string;
-  copy_text: string;
-  reference_link: string | null;
-  assignee_id: string | null;
-}
-```
-
-`ContentPieceForm` usa `piezaOrigen` para los valores iniciales exactamente como ya usa `ideaOrigen`
-— **salvo la fecha, que queda en blanco** (el valor por defecto de "ahora", igual que un formulario
-nuevo sin origen) para que sea lo primero que el ojo detecta como pendiente de ajustar. Sin
-adjuntos: la pieza nace sin archivos, se suben los que hagan falta.
-
-Si llegan `idea` y `desde` a la vez en la URL (no debería pasar desde la interfaz, pero es un
-parámetro que cualquiera puede escribir a mano), gana `idea` — convertir una idea es un compromiso
-que ya quedó registrado en `ideas.status`, y perderlo silenciosamente por preferir el otro origen
-sería peor que la ambigüedad.
+**Ya construido, sin cambios.** Ver la corrección al principio de este documento.
 
 ### A3 — Fechas recurrentes
 
@@ -208,65 +199,58 @@ dos menos usados es lo que la mantiene legible.
 4. `fechasRecurrentes`: `fechaInicial` siempre es la primera fecha devuelta, aunque su día no esté
    en `diasDeLaSemana`.
 
+**Unitarias, de `createContentPieces`** (`tests/unit/actions-lote.test.ts`, con `createContentPiece`
+mockeado — no es viable como prueba de integración: ver la corrección al principio de este
+documento):
+
+5. Con 3 ítems donde `createContentPiece` resuelve las 3 veces, devuelve las 3 en `creadas` con su
+   índice y su id, y `fallidas` vacío.
+6. Con 3 ítems donde la llamada del ítem en el índice 1 rechaza, esa queda en `fallidas` con su
+   mensaje y las otras dos quedan en `creadas` — un fallo no detiene el resto del lote.
+7. Con 13 ítems, rechaza la promesa completa con un mensaje que menciona el tope, y
+   `createContentPiece` no se llama ni una vez.
+
 **Componentes** (`tests/unit/components/`):
 
-5. `ContentPieceForm` con `piezaOrigen`: los campos se prellenan salvo la fecha, y no se muestra
-   ningún adjunto.
-6. `ContentPieceForm` con "Repetir esta pieza" marcado: cambiar la cantidad o los días actualiza el
+8. `ContentPieceForm` con "Repetir esta pieza" marcado: cambiar la cantidad o los días actualiza el
    resumen de fechas antes de enviar.
-7. `ContentPiecesMultipleForm`: elegir 3 archivos muestra 3 filas; enviar llama a
+9. `ContentPiecesMultipleForm`: elegir 3 archivos muestra 3 filas; enviar llama a
    `createContentPieces` con los 3 ítems y sube cada archivo a la pieza que le corresponde por
    índice.
-8. `ContentPiecesMultipleForm`: si `createContentPieces` devuelve una fila fallida, esa fila muestra
-   su error y las filas que sí se crearon suben su archivo igual — un fallo no detiene a las demás.
-
-**Integración** (`tests/integration/`, contra Postgres real):
-
-9. `createContentPieces` con un ítem cuyo `client_id` es de OTRA agencia: esa fila falla con el
-   mismo error que ya da `createContentPiece` hoy, y los demás ítems válidos del mismo lote sí se
-   crean.
-10. `createContentPieces` con 13 ítems rechaza la llamada completa antes de crear ninguna fila.
+10. `ContentPiecesMultipleForm`: si `createContentPieces` devuelve una fila fallida, esa fila muestra
+    su error y las filas que sí se crearon suben su archivo igual — un fallo no detiene a las demás.
 
 **Manual:** ninguno. Si algo de esta entrega solo se puede verificar abriendo el navegador, falta
 una prueba.
 
 ## Criterios de aceptación
 
-1. CUANDO alguien pulsa "Duplicar" en una pieza, EL SISTEMA abre el formulario de creación con
-   cliente, plataforma, formato, título, copy, link y responsable prellenados desde esa pieza, la
-   fecha en blanco, y sin adjuntos.
-2. CUANDO se suben varios archivos en `/piezas/nueva-multiple`, EL SISTEMA crea una pieza
+1. CUANDO se suben varios archivos en `/piezas/nueva-multiple`, EL SISTEMA crea una pieza
    independiente por archivo, cada una con su propio título y fecha.
-3. CUANDO una fila de un lote falla al crearse, EL SISTEMA conserva las filas que sí se crearon y
+2. CUANDO una fila de un lote falla al crearse, EL SISTEMA conserva las filas que sí se crearon y
    muestra cuál falló y por qué, sin detener ni revertir el resto.
-4. CUANDO se marca "Repetir esta pieza" con días y una cantidad, EL SISTEMA crea esa cantidad de
+3. CUANDO se marca "Repetir esta pieza" con días y una cantidad, EL SISTEMA crea esa cantidad de
    piezas independientes, una por cada fecha calculada, cada una editable y borrable sin afectar a
    las demás.
-5. CUANDO un lote pide más de 12 piezas, EL SISTEMA rechaza la llamada completa sin crear ninguna.
-6. CUANDO un ítem de un lote apunta a una marca de otra agencia, EL SISTEMA rechaza esa fila y crea
-   igual las demás filas válidas del mismo lote.
+4. CUANDO un lote pide más de 12 piezas, EL SISTEMA rechaza la llamada completa sin crear ninguna.
 
 ### Cómo se verifica cada criterio
 
 | Criterio | Cómo |
 |---|---|
-| 1 | Componente 5 |
-| 2 | Componente 7 |
-| 3 | Componente 8, Integración 9 |
-| 4 | Unitaria 1, Componente 6 |
-| 5 | Integración 10 |
-| 6 | Integración 9 |
+| 1 | Componente 9 |
+| 2 | Componente 10, Unitaria 6 |
+| 3 | Unitaria 1, Componente 8 |
+| 4 | Unitaria 7 |
 
 ## Orden de entrega
 
 1. `lib/recurrencia.ts` con `fechasRecurrentes` y sus unitarias — función pura, no depende de nada
    más.
 2. `app/actions-lote.ts` con `createContentPieces` (reutilizando `createContentPiece`) y sus pruebas
-   de integración (tope de 12, aislamiento por agencia).
-3. A1 — prop `piezaOrigen` en `ContentPieceForm`, botón "Duplicar" en `ContentPieceDetail`, y la
-   prueba de componente. Es el cambio más chico sobre el formulario existente.
-4. A3 — sección "Repetir esta pieza" dentro de `ContentPieceForm`, usando `fechasRecurrentes` y
+   unitarias (tope de 12, fallo parcial), mockeando `createContentPiece`.
+3. A3 — sección "Repetir esta pieza" dentro de `ContentPieceForm`, usando `fechasRecurrentes` y
    `createContentPieces` de los pasos 1 y 2, con su prueba de componente.
-5. A2 — página `/piezas/nueva-multiple` y `ContentPiecesMultipleForm`, la superficie nueva más
+4. A2 — página `/piezas/nueva-multiple` y `ContentPiecesMultipleForm`, la superficie nueva más
    grande, al final porque depende de `createContentPieces` y reutiliza el mismo patrón de subida
    que A3 ya deja probado en el formulario principal.
