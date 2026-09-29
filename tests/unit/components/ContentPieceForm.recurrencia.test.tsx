@@ -163,6 +163,58 @@ describe('ContentPieceForm — repetir esta pieza', () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith('/calendario'));
   });
 
+  it('activar "Repetir" con la fecha vacía no marca ningún día ni muestra "Invalid Date" en el resumen', () => {
+    const { container } = render(<ContentPieceForm clients={crearClientes()} team={[]} defaultClientId="client-a" />);
+
+    const fechaInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(fechaInput, { target: { value: '' } });
+
+    fireEvent.click(screen.getByLabelText('Repetir esta pieza'));
+
+    const botonesDeDia = Array.from(container.querySelectorAll('button[aria-pressed]'));
+    expect(botonesDeDia.every((b) => b.getAttribute('aria-pressed') === 'false')).toBe(true);
+    expect(screen.queryByText(/Invalid Date/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Se crearán/)).not.toBeInTheDocument();
+  });
+
+  it('cambiar los días marcados (no solo la cantidad) cambia las fechas que se envían', async () => {
+    vi.mocked(createContentPieces).mockResolvedValue({
+      creadas: [
+        { indice: 0, id: 'id-1' },
+        { indice: 1, id: 'id-2' },
+      ],
+      fallidas: [],
+    });
+
+    const { container } = render(<ContentPieceForm clients={crearClientes()} team={[]} defaultClientId="client-a" />);
+
+    fireEvent.change(screen.getByPlaceholderText('Ej. Lanzamiento colección primavera'), {
+      target: { value: 'Post semanal' },
+    });
+    fireEvent.click(screen.getByLabelText('Repetir esta pieza'));
+    fireEvent.change(screen.getByLabelText('¿Cuántas veces?'), { target: { value: '2' } });
+
+    const fechaInput = container.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    const fechaBase = new Date(fechaInput.value);
+    const diaOriginal = fechaBase.getDay();
+    const diaNuevo = (diaOriginal + 2) % 7;
+
+    // Orden fijo en que el componente pinta los botones de día (DIAS_DE_LA_SEMANA: L M M J V S D,
+    // que en números de Date#getDay() es [1,2,3,4,5,6,0]). Son los únicos botones con aria-pressed
+    // en el formulario, así que se ubican por posición en ese orden.
+    const ORDEN_DE_DIAS = [1, 2, 3, 4, 5, 6, 0];
+    const botonesDeDia = Array.from(container.querySelectorAll('button[aria-pressed]'));
+    fireEvent.click(botonesDeDia[ORDEN_DE_DIAS.indexOf(diaOriginal)]); // desmarca el día por defecto
+    fireEvent.click(botonesDeDia[ORDEN_DE_DIAS.indexOf(diaNuevo)]); // marca uno distinto
+
+    fireEvent.click(screen.getByRole('button', { name: 'Crear como borrador' }));
+
+    await waitFor(() => expect(createContentPieces).toHaveBeenCalledTimes(1));
+    const items = vi.mocked(createContentPieces).mock.calls[0][0];
+    const esperadas = fechasRecurrentes(fechaBase, [diaNuevo], 2);
+    expect(items.map((i) => i.scheduled_at)).toEqual(esperadas.map((f) => f.toISOString()));
+  });
+
   it('si createContentPieces devuelve alguna fila fallida, nombra la fecha que falló, no navega, refresca y no deja reenviar', async () => {
     vi.mocked(createContentPieces).mockResolvedValue({
       creadas: [{ indice: 0, id: 'id-1' }],

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ContentPiecesMultipleForm } from '@/components/ContentPiecesMultipleForm';
 import { createContentPieces } from '@/app/actions-lote';
@@ -39,6 +39,19 @@ function crearClientes(): Client[] {
       created_by: null,
       created_at: '2026-01-01T00:00:00.000Z',
     },
+    {
+      id: 'client-b',
+      name: 'Cliente B',
+      agency_id: 'agency-1',
+      brand_name: 'Marca B',
+      timezone: 'UTC',
+      logo_url: null,
+      notes: null,
+      archived: false,
+      billing_mode: 'paquete',
+      created_by: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+    },
   ];
 }
 
@@ -51,8 +64,30 @@ function elegirArchivos(archivos: File[]) {
   fireEvent.change(input, { target: { files: archivos } });
 }
 
+// El <select> de cliente no tiene htmlFor/id asociado a su <label> (mismo patrón que
+// ContentPieceForm), y esta pantalla tiene otros dos <select> (plataforma, formato) además del de
+// cliente -- getByRole('combobox') a secas encontraría los tres. Se ubica por el texto de su
+// etiqueta, igual que hace ContentPieceForm.test.tsx.
+function selectorDeCliente(): HTMLElement {
+  const contenedor = screen.getByText('Cliente / Marca').closest('div');
+  if (!contenedor) throw new Error('No se encontró el contenedor de "Cliente / Marca"');
+  return within(contenedor).getByRole('combobox');
+}
+
 describe('ContentPiecesMultipleForm', () => {
   afterEach(() => vi.clearAllMocks());
+
+  it('con defaultClientId, el cliente preseleccionado es ese y no el primero de la lista', () => {
+    render(<ContentPiecesMultipleForm clients={crearClientes()} defaultClientId="client-b" />);
+
+    expect(selectorDeCliente()).toHaveValue('client-b');
+  });
+
+  it('sin defaultClientId, el cliente preseleccionado es el primero de la lista (comportamiento de siempre)', () => {
+    render(<ContentPiecesMultipleForm clients={crearClientes()} />);
+
+    expect(selectorDeCliente()).toHaveValue('client-a');
+  });
 
   it('elegir 3 archivos muestra 3 filas para completar', () => {
     render(<ContentPiecesMultipleForm clients={crearClientes()} />);
