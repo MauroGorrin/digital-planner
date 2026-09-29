@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Client, ContentFormat, PlatformType } from '@/types/database';
 import { FORMAT_LABELS, PLATFORM_LABELS } from '@/types/database';
 import { createContentPieces } from '@/app/actions-lote';
@@ -23,7 +24,15 @@ interface FilaDeLote {
   scheduledAt: string;
 }
 
-type EstadoDeFila = { tipo: 'pendiente' } | { tipo: 'creada'; id: string } | { tipo: 'error'; mensaje: string };
+type EstadoDeFila =
+  | { tipo: 'pendiente' }
+  | { tipo: 'creada'; id: string }
+  // La pieza sí existe (por eso lleva `id`, igual que 'creada') pero subirle el archivo falló. Se
+  // distingue de 'error' -- que significa que la pieza nunca se creó -- porque acá sí hay una
+  // ficha a la que ir y el archivo se puede reintentar desde ahí; tratarla como 'error' escondería
+  // el enlace y contradiría que la pieza es real.
+  | { tipo: 'creada-sin-archivo'; id: string; mensaje: string }
+  | { tipo: 'error'; mensaje: string };
 
 /**
  * Carga múltiple: de una tanda de archivos (ej. una sesión de fotos) crea una pieza independiente
@@ -73,7 +82,11 @@ export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
     setFilas((previas) => previas.map((f, i) => (i === indice ? { ...f, ...cambios } : f)));
   }
 
-  const puedeEnviar = filas.length > 0 && filas.every((f) => f.title.trim().length > 0) && !!clientId;
+  // scheduledAt entra a la condición: una fila con la fecha vacía (el campo se puede borrar a
+  // mano, es un datetime-local sin `required`) no debe poder enviarse -- new Date('').toISOString()
+  // lanza un RangeError, y validar acá evita llegar a ese estado en vez de recuperarse de él.
+  const puedeEnviar =
+    filas.length > 0 && filas.every((f) => f.title.trim().length > 0 && f.scheduledAt.trim().length > 0) && !!clientId;
 
   async function alEnviar(e: React.FormEvent) {
     e.preventDefault();
@@ -83,16 +96,21 @@ export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
     setErrorGeneral(null);
     setEstados(filas.map(() => ({ tipo: 'pendiente' })));
 
-    const items = filas.map((f) => ({
-      client_id: clientId,
-      platform,
-      format: contentFormat,
-      title: f.title,
-      copy_text: f.copyText,
-      scheduled_at: new Date(f.scheduledAt).toISOString(),
-    }));
-
     try {
+      // Construido DENTRO del try: new Date(f.scheduledAt).toISOString() lanza un RangeError con
+      // una fecha vacía o inválida, y si eso pasara fuera del try (como pasaba antes) el `finally`
+      // de abajo nunca correría -- `enviando` se quedaría en true para siempre, con el botón
+      // trabado en "Creando…" sin ningún error visible. `puedeEnviar` ya debería evitar llegar
+      // acá con una fecha vacía; esto es la red de seguridad si de todos modos se llega.
+      const items = filas.map((f) => ({
+        client_id: clientId,
+        platform,
+        format: contentFormat,
+        title: f.title,
+        copy_text: f.copyText,
+        scheduled_at: new Date(f.scheduledAt).toISOString(),
+      }));
+
       const resultado = await createContentPieces(items);
       const nuevosEstados: EstadoDeFila[] = filas.map(() => ({ tipo: 'pendiente' }));
       for (const f of resultado.fallidas) nuevosEstados[f.indice] = { tipo: 'error', mensaje: f.mensaje };
@@ -115,9 +133,13 @@ export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
           });
         } catch (err) {
           // La pieza ya se creó (está en resultado.creadas); solo falló subirle el archivo. Se
-          // deja como "creada" -- el mismo criterio que ContentPieceForm usa para una sola pieza:
-          // se puede subir el archivo después desde la ficha, no hace falta bloquear la pantalla.
+          // refleja con su propio estado -- ni "creada" a secas (escondería que el archivo nunca
+          // llegó) ni "error" (la pieza sí existe, y "error" acá significaría que nunca se creó) --
+          // manteniendo el enlace a la ficha: el mismo criterio que ContentPieceForm usa para una
+          // sola pieza, se puede subir el archivo después desde ahí.
+          const mensaje = err instanceof Error ? err.message : 'No se pudo subir el archivo.';
           console.error('[ContentPiecesMultipleForm] no se pudo subir el archivo de la fila', c.indice, err);
+          setEstados((previos) => previos.map((e, i) => (i === c.indice ? { tipo: 'creada-sin-archivo', id: c.id, mensaje } : e)));
         }
       }
     } catch (err) {
@@ -201,7 +223,19 @@ export function ContentPiecesMultipleForm({ clients }: { clients: Client[] }) {
               <div key={i} className="rounded-lg border border-slate-200 p-3">
                 <p className="mb-2 truncate text-xs font-medium text-slate-500">{fila.archivo.name}</p>
                 {estado?.tipo === 'creada' ? (
-                  <p className="text-sm text-green-700">✓ Creada</p>
+                  <p className="text-sm text-green-700">
+                    ✓ Creada —{' '}
+                    <Link href={`/piezas/${estado.id}`} className="font-medium underline">
+                      Ver pieza
+                    </Link>
+                  </p>
+                ) : estado?.tipo === 'creada-sin-archivo' ? (
+                  <div className="text-sm text-amber-800">
+                    <p>Pieza creada, pero no se pudo subir el archivo: {estado.mensaje} Puedes subirlo después desde la ficha.</p>
+                    <Link href={`/piezas/${estado.id}`} className="font-medium underline">
+                      Ver pieza
+                    </Link>
+                  </div>
                 ) : estado?.tipo === 'error' ? (
                   <p className="text-sm text-red-700">{estado.mensaje}</p>
                 ) : (
