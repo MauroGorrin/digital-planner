@@ -13,13 +13,16 @@ import { useConfirm } from './ConfirmDialog';
 import { formatDateTimeInTz } from '@/lib/tz';
 import { urlSegura } from '@/lib/url-segura';
 import {
+  approveInternalReview,
   approvePiece,
   cancelPiece,
   deleteContentPiece,
   duplicateContentPiece,
   markPiecePublished,
   markPieceScheduled,
+  requestInternalChanges,
   requestPieceChanges,
+  submitForInternalReview,
   submitForReview,
 } from '@/app/actions';
 
@@ -45,6 +48,8 @@ export function ContentPieceDetail({
   const [isPending, startTransition] = useTransition();
   const [changesNote, setChangesNote] = useState('');
   const [showChangesBox, setShowChangesBox] = useState(false);
+  const [internalChangesNote, setInternalChangesNote] = useState('');
+  const [showInternalChangesBox, setShowInternalChangesBox] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [showCancelBox, setShowCancelBox] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,8 +150,8 @@ export function ContentPieceDetail({
         {isAgency && (
           <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
             {piece.status === 'borrador' && (
-              <button disabled={isPending} onClick={() => run(() => submitForReview(piece.id))} className="btn-primary">
-                Enviar a revisión
+              <button disabled={isPending} onClick={() => run(() => submitForInternalReview(piece.id))} className="btn-primary">
+                Enviar a revisión interna
               </button>
             )}
             {piece.status === 'cambios_solicitados' && (
@@ -203,6 +208,64 @@ export function ContentPieceDetail({
                 Confirmar cancelación
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Revisión interna: solo un agency_admin decide si sale al cliente */}
+        {isAgency && profile.role === 'agency_admin' && piece.status === 'pendiente_revision_interna' && (
+          <div className="mt-5 rounded-xl border border-brand-100 bg-brand-50/60 p-4">
+            <p className="mb-3 text-sm font-medium text-slate-700">¿Apruebas esta pieza para mandarla al cliente?</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                disabled={isPending}
+                onClick={() =>
+                  confirm({
+                    title: 'Aprobar revisión interna',
+                    description: 'La pieza pasa a esperar la revisión del cliente.',
+                    confirmLabel: 'Aprobar y enviar',
+                    onConfirm: () => run(() => approveInternalReview(piece.id)),
+                  })
+                }
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              >
+                ✓ Aprobar y enviar al cliente
+              </button>
+              <button
+                onClick={() => setShowInternalChangesBox((v) => !v)}
+                className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-red-600 ring-1 ring-red-200 hover:bg-red-50"
+              >
+                Pedir corrección interna
+              </button>
+            </div>
+            {showInternalChangesBox && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={internalChangesNote}
+                  onChange={(e) => setInternalChangesNote(e.target.value)}
+                  placeholder="Explica qué hay que corregir…"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  rows={3}
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setShowInternalChangesBox(false)} className="text-sm text-slate-500">
+                    Cerrar
+                  </button>
+                  <button
+                    disabled={!internalChangesNote.trim() || isPending}
+                    onClick={() =>
+                      run(async () => {
+                        await requestInternalChanges(piece.id, internalChangesNote);
+                        setInternalChangesNote('');
+                        setShowInternalChangesBox(false);
+                      })
+                    }
+                    className="rounded-lg bg-red-600 px-3.5 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    Enviar solicitud
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
