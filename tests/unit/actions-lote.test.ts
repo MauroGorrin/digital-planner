@@ -6,6 +6,11 @@ vi.mock('@/app/actions', () => ({
   createContentPiece: (...args: unknown[]) => createContentPiece(...args),
 }));
 
+const requireAgency = vi.fn().mockResolvedValue({ id: 'profile-1', role: 'agency_admin' });
+vi.mock('@/lib/auth', () => ({
+  requireAgency: (...args: unknown[]) => requireAgency(...args),
+}));
+
 import { createContentPieces } from '@/app/actions-lote';
 
 function item(overrides: Partial<ItemDeLote> = {}): ItemDeLote {
@@ -22,6 +27,7 @@ function item(overrides: Partial<ItemDeLote> = {}): ItemDeLote {
 
 describe('createContentPieces', () => {
   it('crea las piezas de todos los ítems cuando ninguna falla, en el mismo orden', async () => {
+    requireAgency.mockReset().mockResolvedValue({ id: 'profile-1', role: 'agency_admin' });
     createContentPiece.mockReset();
     createContentPiece.mockResolvedValueOnce('id-1').mockResolvedValueOnce('id-2').mockResolvedValueOnce('id-3');
 
@@ -70,6 +76,7 @@ describe('createContentPieces', () => {
   });
 
   it('acepta un lote de exactamente 12 ítems', async () => {
+    requireAgency.mockReset().mockResolvedValue({ id: 'profile-1', role: 'agency_admin' });
     createContentPiece.mockReset();
     createContentPiece.mockResolvedValue('id-x');
     const items = Array.from({ length: 12 }, () => item());
@@ -78,5 +85,17 @@ describe('createContentPieces', () => {
 
     expect(resultado.creadas).toHaveLength(12);
     expect(resultado.fallidas).toHaveLength(0);
+  });
+
+  it('resuelve la sesión con requireAgency() ANTES del bucle, sin capturar su rechazo como una fila fallida', async () => {
+    // requireAgency() funciona lanzando el redirect() de Next cuando la sesión expiró: acá se
+    // simula ese rechazo. Si createContentPieces lo tratara como el fallo de un ítem cualquiera,
+    // esta promesa resolvería con una fila en `fallidas` en vez de rechazar -- exactamente el bug
+    // que este cambio corrige (un redirect que nunca redirige, repetido N veces).
+    requireAgency.mockReset().mockRejectedValue(new Error('NEXT_REDIRECT'));
+    createContentPiece.mockReset();
+
+    await expect(createContentPieces([item(), item()])).rejects.toThrow('NEXT_REDIRECT');
+    expect(createContentPiece).not.toHaveBeenCalled();
   });
 });
