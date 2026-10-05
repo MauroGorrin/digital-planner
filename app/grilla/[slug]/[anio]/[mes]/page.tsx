@@ -45,7 +45,7 @@ export default async function GrillaPublicaPage(props: {
         <div className="mx-auto max-w-5xl">
           <p className="text-sm uppercase tracking-widest text-slate-300">Plan de contenido</p>
           <h1 className="mt-2 text-3xl font-semibold">{cliente.brand_name}</h1>
-          <p className="mt-1 text-lg capitalize text-slate-200">{titulo}</p>
+          <p className="mt-1 text-lg text-slate-200">{titulo.charAt(0).toUpperCase() + titulo.slice(1)}</p>
           <p className="mt-4 text-sm text-slate-300">
             {piezas.length === 0
               ? 'Aún no hay contenido aprobado para este mes.'
