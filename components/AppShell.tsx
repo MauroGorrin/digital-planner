@@ -5,6 +5,7 @@ import { SignOutButton } from './SignOutButton';
 
 const AGENCY_NAV = [
   { href: '/calendario', label: 'Calendario' },
+  { href: '/grilla', label: 'Grilla' },
   { href: '/pendientes', label: 'Pendientes' },
   { href: '/metricas', label: 'Métricas' },
   { href: '/ideas', label: 'Ideas' },
@@ -14,6 +15,7 @@ const AGENCY_NAV = [
 
 const CLIENT_NAV = [
   { href: '/calendario', label: 'Calendario' },
+  { href: '/grilla', label: 'Grilla' },
   { href: '/pendientes', label: 'Pendientes' },
   { href: '/metricas', label: 'Métricas' },
   { href: '/ideas', label: 'Ideas' },
