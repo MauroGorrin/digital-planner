@@ -1,33 +1,24 @@
 import { formatDateTimeInTz } from '@/lib/tz';
+import { AvatarDeMarca } from './marca';
 import { PortadaDePieza } from './PortadaDePieza';
 import type { PropsDePreview } from './types';
 
+/** Pines de Pinterest en columnas, con título y tablero debajo de cada imagen. */
 export function PreviewPinterest({ piezas }: PropsDePreview) {
   return (
-    <div className="columns-2 gap-4 md:columns-3">
+    <div className="columns-2 gap-3 sm:columns-3">
       {piezas.map((pieza) => (
-        <article
-          key={pieza.id}
-          className="mb-4 break-inside-avoid rounded-2xl bg-white p-2 shadow-sm transition hover:scale-[1.02]"
-        >
-          <div className="relative">
-            <PortadaDePieza pieza={pieza} className="aspect-[4/5] w-full rounded-2xl" />
-            <span
-              aria-hidden="true"
-              className="absolute right-2 top-2 rounded-full bg-red-600 px-3 py-1 text-xs font-semibold text-white"
-            >
-              💾
-            </span>
+        <article key={pieza.id} className="mb-3 break-inside-avoid overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200">
+          <PortadaDePieza pieza={pieza} className="aspect-[2/3] w-full" play="pequeno" />
+          <div className="p-2.5">
+            <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">{pieza.title}</h3>
+            <div className="mt-1.5 flex items-center gap-2">
+              <AvatarDeMarca marca={pieza.brand_name} tamano="h-5 w-5" />
+              <p className="truncate text-xs text-slate-500">
+                {pieza.brand_name} · {formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}
+              </p>
+            </div>
           </div>
-          <div className="mt-2 flex items-center gap-2 px-1">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-xs font-semibold text-white">
-              {pieza.brand_name.charAt(0).toUpperCase()}
-            </span>
-            <p className="truncate text-xs text-slate-600">{pieza.brand_name}</p>
-          </div>
-          <h3 className="mt-1 px-1 text-sm font-semibold text-slate-900">{pieza.title}</h3>
-          <p className="line-clamp-3 px-1 text-xs text-slate-600">{pieza.copy_text}</p>
-          <p className="px-1 pt-1 text-[10px] text-slate-400">{formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}</p>
         </article>
       ))}
     </div>

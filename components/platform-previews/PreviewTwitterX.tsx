@@ -1,15 +1,7 @@
 import { formatDateTimeInTz } from '@/lib/tz';
 import { PortadaDePieza } from './PortadaDePieza';
+import { usuarioDeMarca } from './marca';
 import type { PropsDePreview } from './types';
-
-/** "Marca Uno" -> "marcauno": sin acentos, sin espacios ni símbolos, en minúsculas. */
-function slugify(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
 
 export function PreviewTwitterX({ piezas }: PropsDePreview) {
   return (
@@ -23,7 +15,7 @@ export function PreviewTwitterX({ piezas }: PropsDePreview) {
             <p className="text-sm text-slate-900">
               <span className="font-bold">{pieza.brand_name}</span>{' '}
               <span className="text-slate-500">
-                @{slugify(pieza.brand_name)} · {formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}
+                @{usuarioDeMarca(pieza.brand_name)} · {formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}
               </span>
             </p>
             <p className="mt-1 line-clamp-5 whitespace-pre-line text-sm text-slate-800">{pieza.copy_text}</p>

@@ -50,11 +50,14 @@ export async function updateSession(request: NextRequest) {
   // (verificarAccesoAReporte()), no con el login. Abrirlas aqui es lo que deja que alguien sin
   // cuenta -- el cliente que recibe el link por WhatsApp -- las vea; sin RLS de por medio, porque
   // ambas leen con el cliente de servicio, la firma ES el control de acceso.
+  // `/grilla/[clientId]/[anio]/[mes]` es la presentación compartida de la grilla (lib/grilla-compartir.ts).
+  // Se abre solo con esa forma exacta: `/grilla` a secas sigue siendo la vista privada de la app.
   const isPublic =
     path.startsWith('/login') ||
     path.startsWith('/registro') ||
     path.startsWith('/reportes') ||
     path.startsWith('/api/reportes/pdf') ||
+    /^\/grilla\/[^/]+\/\d{4}\/\d{1,2}\/?$/.test(path) ||
     path.startsWith('/_next');
 
   if (!user && !isPublic) {

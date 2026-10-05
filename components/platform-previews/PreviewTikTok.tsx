@@ -1,20 +1,25 @@
-import { formatDateTimeInTz } from '@/lib/tz';
+import { AvatarDeMarca, usuarioDeMarca } from './marca';
 import { PortadaDePieza } from './PortadaDePieza';
 import type { PropsDePreview } from './types';
 
-const MAXIMO = 20;
-
+/** Video vertical de TikTok, con el texto sobre la imagen y la columna de iconos a la derecha. */
 export function PreviewTikTok({ piezas }: PropsDePreview) {
   return (
-    <div className="grid grid-cols-2 gap-1 rounded-xl bg-black p-1 md:grid-cols-4">
-      {piezas.slice(0, MAXIMO).map((pieza) => (
-        <div key={pieza.id} className="relative">
-          <PortadaDePieza pieza={pieza} className="aspect-[9/16] w-full" play="grande" />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 to-transparent p-2">
-            <p className="truncate text-xs font-semibold text-white">{pieza.title}</p>
-            <p className="text-[10px] text-slate-300">{formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}</p>
+    <div className="mx-auto flex max-w-full snap-x gap-4 overflow-x-auto pb-2">
+      {piezas.map((pieza) => (
+        <article key={pieza.id} className="relative aspect-[9/16] w-56 shrink-0 snap-center overflow-hidden rounded-2xl bg-black">
+          <PortadaDePieza pieza={pieza} className="absolute inset-0" play="grande" />
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-16 text-white">
+            <p className="text-sm font-semibold">@{usuarioDeMarca(pieza.brand_name)}</p>
+            <p className="mt-1 line-clamp-2 text-xs">{pieza.copy_text}</p>
           </div>
-        </div>
+          <div className="absolute bottom-16 right-2 flex flex-col items-center gap-4 text-lg text-white" aria-hidden="true">
+            <AvatarDeMarca marca={pieza.brand_name} tamano="h-9 w-9" className="ring-2 ring-white" />
+            <span>♥</span>
+            <span>💬</span>
+            <span>↗</span>
+          </div>
+        </article>
       ))}
     </div>
   );

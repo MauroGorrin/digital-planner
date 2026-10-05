@@ -6,6 +6,7 @@ import type { VistaPieza } from '@/lib/grilla';
 function crearVista(overrides: Partial<VistaPieza> = {}): VistaPieza {
   return {
     id: 'pieza-1',
+    client_id: 'cliente-1',
     title: 'Pieza de prueba',
     copy_text: 'Copy de prueba',
     platform: 'instagram',
@@ -38,18 +39,18 @@ describe('GrillaDeContenido', () => {
 
   it('al elegir una plataforma muestra solo sus piezas', () => {
     const piezas = [
-      crearVista({ id: 'a', title: 'Post en Instagram', platform: 'instagram' }),
-      crearVista({ id: 'b', title: 'Video en TikTok', platform: 'tiktok' }),
+      crearVista({ id: 'a', copy_text: 'Post en Instagram', platform: 'instagram' }),
+      crearVista({ id: 'b', copy_text: 'Video en TikTok', platform: 'tiktok' }),
     ];
 
     render(<GrillaDeContenido piezas={piezas} />);
-    expect(screen.getByText('Post en Instagram')).toBeInTheDocument();
-    expect(screen.getByText('Video en TikTok')).toBeInTheDocument();
+    expect(screen.getByText(/Post en Instagram/)).toBeInTheDocument();
+    expect(screen.getByText(/Video en TikTok/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /TikTok/ }));
 
     expect(screen.queryByText('Post en Instagram')).not.toBeInTheDocument();
-    expect(screen.getByText('Video en TikTok')).toBeInTheDocument();
+    expect(screen.getByText(/Video en TikTok/)).toBeInTheDocument();
   });
 
   it('sin piezas muestra el estado vacío', () => {

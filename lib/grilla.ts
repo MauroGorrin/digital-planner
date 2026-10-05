@@ -4,6 +4,7 @@ import { PLATFORM_LABELS } from '@/types/database';
 /** Una pieza lista para la grilla: datos de presentación más la portada ya firmada. */
 export interface VistaPieza {
   id: string;
+  client_id: string;
   title: string;
   copy_text: string;
   platform: PlatformType;

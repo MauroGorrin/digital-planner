@@ -4,6 +4,7 @@ import { agruparPorPlataforma, type VistaPieza } from '@/lib/grilla';
 function crearVista(overrides: Partial<VistaPieza> = {}): VistaPieza {
   return {
     id: 'pieza-1',
+    client_id: 'cliente-1',
     title: 'Pieza',
     copy_text: 'Copy',
     platform: 'instagram',

@@ -1,28 +1,23 @@
 import { formatDateTimeInTz } from '@/lib/tz';
+import { AvatarDeMarca } from './marca';
 import { PortadaDePieza } from './PortadaDePieza';
 import type { PropsDePreview } from './types';
 
+/** Miniaturas de YouTube: imagen 16:9, título y canal debajo, como en la página de resultados. */
 export function PreviewYouTube({ piezas }: PropsDePreview) {
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+    <div className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
       {piezas.map((pieza) => (
-        <article key={pieza.id} className="group">
-          <div className="relative">
-            <PortadaDePieza
-              pieza={pieza}
-              className="aspect-video w-full rounded-lg transition group-hover:brightness-75"
-              play="ninguno"
-            />
-            <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 pl-1 text-white shadow">
-                ▶
-              </span>
-            </span>
+        <article key={pieza.id}>
+          <PortadaDePieza pieza={pieza} className="aspect-video w-full rounded-xl" play="grande" />
+          <div className="mt-3 flex gap-3">
+            <AvatarDeMarca marca={pieza.brand_name} tamano="h-9 w-9" />
+            <div className="min-w-0">
+              <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">{pieza.title}</h3>
+              <p className="truncate text-xs text-slate-500">{pieza.brand_name}</p>
+              <p className="text-xs text-slate-500">{formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}</p>
+            </div>
           </div>
-          <h3 className="mt-2 line-clamp-2 text-sm font-semibold text-slate-900">{pieza.title}</h3>
-          <p className="text-xs text-slate-500">
-            {pieza.brand_name} · {formatDateTimeInTz(pieza.scheduled_at, pieza.timezone)}
-          </p>
         </article>
       ))}
     </div>

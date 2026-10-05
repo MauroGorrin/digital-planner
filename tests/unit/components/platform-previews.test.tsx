@@ -25,6 +25,7 @@ const VISTAS: [string, (props: PropsDePreview) => JSX.Element][] = [
 function crearVista(overrides: Partial<VistaPieza> = {}): VistaPieza {
   return {
     id: 'pieza-1',
+    client_id: 'cliente-1',
     title: 'Lanzamiento de otoño',
     copy_text: 'Texto de la pieza',
     platform: 'instagram',

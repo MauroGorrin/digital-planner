@@ -70,7 +70,7 @@ el control.
 | Firma HMAC de webhooks (`X-Planner-Signature`) | `lib/webhooks/dispatch.ts` |
 | Fecha/hora con zona horaria del cliente | `lib/date-utils.ts`, `lib/tz.ts` |
 | Sesión y cliente de Supabase en servidor | `lib/supabase/server.ts` (`createClient` con cookies, `createServiceClient` con service role) |
-| Rutas públicas (sin sesión) | `lib/supabase/middleware.ts` — hoy `/login`, `/registro`, `/reportes` y `/api/reportes/pdf`. Agregar una ruta pública se hace ahí y solo ahí |
+| Rutas públicas (sin sesión) | `lib/supabase/middleware.ts` — hoy `/login`, `/registro`, `/reportes`, `/api/reportes/pdf` y `/grilla/[clientId]/[anio]/[mes]` (solo esa forma exacta; `/grilla` a secas es la app). Agregar una ruta pública se hace ahí y solo ahí |
 | Link compartible y PDF del reporte de métricas | `lib/reportes.ts` — firma HMAC-SHA256 (`clientId:anio:mes`) con `REPORT_LINK_SECRET`, sin tabla ni columna nueva. La verifica `app/reportes/[clientId]/[anio]/[mes]/page.tsx` y `app/api/reportes/pdf/route.tsx`, los dos con `createServiceClient()` (sin sesión no hay RLS que aplicar, así que la firma ES el control de acceso — nunca selecciones un campo ahí que `app/metricas/page.tsx` no seleccione ya) |
 | Validadores del alta pública | `lib/validacion-registro.ts` — los usan el formulario **y** la Server Action; una sola definición |
 | Promoción a administrador de agencia | `crear_mi_agencia()` en `supabase/migrations/0011_alta_de_agencia.sql` — el único camino de `client` a `agency_admin` que no pasa por el service role |
@@ -111,7 +111,7 @@ promover se termina desde ahí en vez de quedar en un callejón sin salida.
 | `NEXT_PUBLIC_APP_URL` | sí | notificaciones, webhooks, eventos de calendario | fijo en local: `http://localhost:3000` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` / `GOOGLE_REDIRECT_URI` | opcional (solo si se usa Google Calendar) | `app/api/google-calendar/*`, `lib/google-calendar/sync.ts` | Google Cloud Console |
 | `NEXT_PUBLIC_CAPTCHA_PROVIDER` / `NEXT_PUBLIC_CAPTCHA_SITE_KEY` | opcional (captcha del alta y del inicio de sesión) | `lib/captcha.ts`, `components/Captcha.tsx`, `app/registro-actions.ts`, `app/login/page.tsx` | Cloudflare Turnstile o hCaptcha |
-| `REPORT_LINK_SECRET` | opcional (link compartible y PDF del reporte de métricas) | `lib/reportes.ts` (firma HMAC-SHA256 de `/reportes/[clientId]/[anio]/[mes]` y `/api/reportes/pdf`) | Generarla con `openssl rand -hex 32`; sin ella, `/metricas` funciona igual pero sin los botones de compartir |
+| `REPORT_LINK_SECRET` | opcional (link compartible y PDF del reporte de métricas, y link de la grilla) | `lib/reportes.ts` (firma HMAC-SHA256 de `/reportes/[clientId]/[anio]/[mes]` y `/api/reportes/pdf`) y `lib/grilla-compartir.ts` (firma de `/grilla/[clientId]/[anio]/[mes]`, con prefijo `grilla:`) | Generarla con `openssl rand -hex 32`; sin ella, `/metricas` funciona igual pero sin los botones de compartir |
 
 **Sobre el captcha:** se enciende **solo si las dos variables están puestas** (`turnstile` o
 `hcaptcha` como proveedor). Sin ellas `/registro` y `/login` funcionan igual, sin widget — a
