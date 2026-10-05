@@ -48,6 +48,7 @@ function crearCliente(overrides: Partial<Client> = {}): Client {
     name: 'Cliente Uno',
     agency_id: 'agency-1',
     brand_name: 'Marca Uno',
+    slug: 'marca-uno',
     timezone: 'America/Caracas',
     logo_url: null,
     notes: null,

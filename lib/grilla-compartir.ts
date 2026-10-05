@@ -1,14 +1,16 @@
 import crypto from 'crypto';
 import { compartirReportesHabilitado } from '@/lib/reportes';
 
-// Link compartible de la grilla (/grilla/[clientId]/[anio]/[mes]). Usa el mismo secreto que los
+// Link compartible de la grilla (/grilla/[slug]/[anio]/[mes]). Usa el mismo secreto que los
 // reportes (REPORT_LINK_SECRET), pero lo firmado lleva el prefijo `grilla:`: una firma de reporte
-// nunca sirve como firma de grilla, aunque la clave sea la misma.
+// nunca sirve como firma de grilla, aunque la clave sea la misma. Se firma el slug, no el ID: el
+// slug es el que aparece en la URL y no cambia nunca (migración 0015), así que el enlace no se
+// rompe si la marca se renombra.
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export interface AccesoAGrilla {
-  clientId: string;
+  slug: string;
   anio: number;
   mes: number;
 }
@@ -19,19 +21,19 @@ function secretoRequerido(): string {
   return secreto;
 }
 
-export function firmaDeGrilla(clientId: string, anio: number, mes: number): string {
-  return crypto.createHmac('sha256', secretoRequerido()).update(`grilla:${clientId}:${anio}:${mes}`).digest('hex');
+export function firmaDeGrilla(slug: string, anio: number, mes: number): string {
+  return crypto.createHmac('sha256', secretoRequerido()).update(`grilla:${slug}:${anio}:${mes}`).digest('hex');
 }
 
 /** Igual que `firmaEsValida` de lib/reportes.ts: comparación en tiempo constante, sin lanzar. */
 export function firmaDeGrillaEsValida(
-  clientId: string,
+  slug: string,
   anio: number,
   mes: number,
   firma: string | null | undefined
 ): boolean {
   if (!firma || !compartirReportesHabilitado()) return false;
-  const esperada = Buffer.from(firmaDeGrilla(clientId, anio, mes), 'hex');
+  const esperada = Buffer.from(firmaDeGrilla(slug, anio, mes), 'hex');
   const recibida = Buffer.from(firma, 'hex');
   if (esperada.length !== recibida.length) return false;
   return crypto.timingSafeEqual(esperada, recibida);
@@ -39,22 +41,22 @@ export function firmaDeGrillaEsValida(
 
 /** Valida los parámetros crudos de la ruta pública y la firma. Devuelve null ante cualquier fallo. */
 export function verificarAccesoAGrilla(
-  clientId: string,
+  slug: string,
   anio: string,
   mes: string,
   firma: string | null | undefined
 ): AccesoAGrilla | null {
-  if (!UUID.test(clientId)) return null;
+  if (!SLUG.test(slug)) return null;
   if (!/^\d{4}$/.test(anio) || !/^\d{1,2}$/.test(mes)) return null;
   const anioNumero = Number(anio);
   const mesNumero = Number(mes);
   if (mesNumero < 1 || mesNumero > 12) return null;
-  if (!firmaDeGrillaEsValida(clientId, anioNumero, mesNumero, firma)) return null;
-  return { clientId, anio: anioNumero, mes: mesNumero };
+  if (!firmaDeGrillaEsValida(slug, anioNumero, mesNumero, firma)) return null;
+  return { slug, anio: anioNumero, mes: mesNumero };
 }
 
-export function urlDeLaGrilla(baseUrl: string, clientId: string, anio: number, mes: number): string {
-  return `${baseUrl}/grilla/${clientId}/${anio}/${mes}?firma=${firmaDeGrilla(clientId, anio, mes)}`;
+export function urlDeLaGrilla(baseUrl: string, slug: string, anio: number, mes: number): string {
+  return `${baseUrl}/grilla/${slug}/${anio}/${mes}?firma=${firmaDeGrilla(slug, anio, mes)}`;
 }
 
 /** Año y mes de una pieza, leídos en la zona horaria de la marca (no en la del servidor). */

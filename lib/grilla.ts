@@ -5,6 +5,8 @@ import { PLATFORM_LABELS } from '@/types/database';
 export interface VistaPieza {
   id: string;
   client_id: string;
+  /** Slug de la marca, para armar el enlace compartible. */
+  client_slug: string;
   title: string;
   copy_text: string;
   platform: PlatformType;

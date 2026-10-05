@@ -11,27 +11,27 @@ import { limitesDelMes } from '@/lib/metricas';
  * notFound(). Lee con el cliente de servicio, así que solo selecciona lo que la presentación muestra.
  */
 export default async function GrillaPublicaPage(props: {
-  params: Promise<{ clientId: string; anio: string; mes: string }>;
+  params: Promise<{ slug: string; anio: string; mes: string }>;
   searchParams: Promise<{ firma?: string }>;
 }) {
   const params = await props.params;
   const searchParams = await props.searchParams;
 
-  const acceso = verificarAccesoAGrilla(params.clientId, params.anio, params.mes, searchParams.firma);
+  const acceso = verificarAccesoAGrilla(params.slug, params.anio, params.mes, searchParams.firma);
   if (!acceso) notFound();
 
   const supabase = createServiceClient();
 
   const { data: cliente } = await supabase
     .from('clients')
-    .select('brand_name,timezone')
-    .eq('id', acceso.clientId)
+    .select('id,brand_name,timezone')
+    .eq('slug', acceso.slug)
     .single();
   if (!cliente) notFound();
 
   const { inicio, finExclusivo } = limitesDelMes(acceso.anio, acceso.mes, cliente.timezone);
   const piezas = await cargarVistasDeGrilla(supabase, {
-    clientId: acceso.clientId,
+    clientId: cliente.id,
     desde: inicio,
     hasta: finExclusivo,
     orden: 'asc',

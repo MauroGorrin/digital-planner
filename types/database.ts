@@ -111,6 +111,8 @@ export interface Client {
   /** No es anulable: una marca siempre pertenece a una agencia (`not null` en la base). */
   agency_id: string;
   brand_name: string;
+  /** Identificador legible en la URL de la grilla compartida. Lo fija la base al crear la marca (0015). */
+  slug: string;
   timezone: string;
   logo_url: string | null;
   notes: string | null;

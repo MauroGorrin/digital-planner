@@ -26,6 +26,7 @@ function crearVista(overrides: Partial<VistaPieza> = {}): VistaPieza {
   return {
     id: 'pieza-1',
     client_id: 'cliente-1',
+    client_slug: 'marca-uno',
     title: 'Lanzamiento de otoño',
     copy_text: 'Texto de la pieza',
     platform: 'instagram',

@@ -39,6 +39,7 @@ const CLIENTE: Client = {
   name: 'Cliente Uno',
   agency_id: 'agency-1',
   brand_name: 'Marca Uno',
+  slug: 'marca-prueba',
   timezone: 'UTC',
   logo_url: null,
   notes: null,

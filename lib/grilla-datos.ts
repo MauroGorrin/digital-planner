@@ -6,7 +6,7 @@ import type { Attachment, ContentPiece } from '@/types/database';
 /** Solo estados públicos para la grilla. Nunca aparecen aquí los de revisión. */
 export const ESTADOS_EN_GRILLA = ['aprobado', 'programado', 'publicado'];
 
-type Cliente = { brand_name: string; timezone: string };
+type Cliente = { brand_name: string; timezone: string; slug: string };
 
 type FilaPieza = Pick<
   ContentPiece,
@@ -33,7 +33,7 @@ export async function cargarVistasDeGrilla(
 ): Promise<VistaPieza[]> {
   let consulta = supabase
     .from('content_pieces')
-    .select('id,client_id,platform,format,title,copy_text,scheduled_at,status,clients(brand_name,timezone)')
+    .select('id,client_id,platform,format,title,copy_text,scheduled_at,status,clients(brand_name,timezone,slug)')
     .in('status', ESTADOS_EN_GRILLA)
     .order('scheduled_at', { ascending: filtros.orden === 'asc' });
   if (filtros.clientId) consulta = consulta.eq('client_id', filtros.clientId);
@@ -82,6 +82,7 @@ export async function cargarVistasDeGrilla(
     return {
       id: fila.id,
       client_id: fila.client_id,
+      client_slug: cliente?.slug ?? '',
       title: fila.title,
       copy_text: fila.copy_text,
       platform: fila.platform,

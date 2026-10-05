@@ -15,11 +15,11 @@ export default async function GrillaPage() {
   const vistas = await cargarVistasDeGrilla(supabase, { orden: 'desc' });
 
   // Un enlace por marca y mes que tenga contenido público.
-  const meses = new Map<string, { clientId: string; marca: string; anio: number; mes: number }>();
+  const meses = new Map<string, { slug: string; marca: string; anio: number; mes: number }>();
   for (const pieza of vistas) {
     const { anio, mes } = mesDePieza(pieza.scheduled_at, pieza.timezone);
     const clave = `${pieza.client_id}|${anio}|${mes}`;
-    if (!meses.has(clave)) meses.set(clave, { clientId: pieza.client_id, marca: pieza.brand_name, anio, mes });
+    if (!meses.has(clave)) meses.set(clave, { slug: pieza.client_slug, marca: pieza.brand_name, anio, mes });
   }
   const enlaces = [...meses.values()].sort((a, b) => b.anio - a.anio || b.mes - a.mes);
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -40,7 +40,7 @@ export default async function GrillaPage() {
           {puedeCompartir ? (
             <ul className="divide-y divide-slate-200">
               {enlaces.map((enlace) => {
-                const url = urlDeLaGrilla(baseUrl, enlace.clientId, enlace.anio, enlace.mes);
+                const url = urlDeLaGrilla(baseUrl, enlace.slug, enlace.anio, enlace.mes);
                 return (
                   <li key={url} className="flex flex-wrap items-center justify-between gap-3 py-3">
                     <div>

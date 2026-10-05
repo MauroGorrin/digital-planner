@@ -40,6 +40,7 @@ function crearClientes(): Client[] {
       name: 'Cliente A',
       agency_id: 'agency-1',
       brand_name: 'Marca A',
+      slug: 'marca-prueba',
       timezone: 'UTC',
       logo_url: null,
       notes: null,
