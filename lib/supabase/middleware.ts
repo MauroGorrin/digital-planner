@@ -55,6 +55,7 @@ export async function updateSession(request: NextRequest) {
   const isPublic =
     path.startsWith('/login') ||
     path.startsWith('/registro') ||
+    path.startsWith('/auth/callback') ||
     path.startsWith('/reportes') ||
     path.startsWith('/api/reportes/pdf') ||
     /^\/grilla\/[^/]+\/\d{4}\/\d{1,2}\/?$/.test(path) ||

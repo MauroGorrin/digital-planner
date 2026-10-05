@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { registrarAgencia } from '@/app/registro-actions';
 import { Captcha } from '@/components/Captcha';
+import { BotonGoogle } from '@/components/BotonGoogle';
 import { captchaEsObligatorio } from '@/lib/captcha';
 import {
   registroEsValido,
@@ -130,6 +131,11 @@ export function FormularioDeRegistro() {
   }
 
   return (
+    <div className="space-y-4">
+      <BotonGoogle etiqueta="Registrarme con Google" />
+      <div className="flex items-center gap-3 text-xs text-slate-400" aria-hidden="true">
+        <span className="h-px flex-1 bg-slate-200" />o con tu correo<span className="h-px flex-1 bg-slate-200" />
+      </div>
     <form onSubmit={alEnviar} noValidate className="space-y-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Campo campo="nombre" valor={datos.nombre} error={errores.nombre} onCambio={cambiar} autoComplete="given-name" />
@@ -178,6 +184,7 @@ export function FormularioDeRegistro() {
         {enviando ? 'Creando tu cuenta…' : 'Crear mi cuenta'}
       </button>
     </form>
+    </div>
   );
 }
 
