@@ -7,6 +7,7 @@ import type { Client, Profile } from '@/types/database';
 import { BILLING_MODE_LABELS } from '@/types/database';
 import { useConfirm } from './ConfirmDialog';
 import { PanelDeCuentaCreada, type CuentaCreada } from './PanelDeCuentaCreada';
+import { BotonCopiarInvitacion } from './BotonCopiarInvitacion';
 import {
   assignTeamMember,
   crearUsuario,
@@ -203,9 +204,14 @@ export function ClientDetail({
               <span>
                 {c.profiles?.full_name} <span className="text-slate-400">· {c.profiles?.email}</span>
               </span>
-              <button onClick={() => run(() => removeClientContact(client.id, c.profile_id))} className="text-xs text-red-500 hover:underline">
-                Quitar
-              </button>
+              <div className="flex items-center gap-3">
+                {c.profiles && (
+                  <BotonCopiarInvitacion fullName={c.profiles.full_name} email={c.profiles.email} marca={client.brand_name} />
+                )}
+                <button onClick={() => run(() => removeClientContact(client.id, c.profile_id))} className="text-xs text-red-500 hover:underline">
+                  Quitar
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -218,14 +224,21 @@ export function ClientDetail({
               // formulario de esta.
               setCuentaCreada(null);
               const correo = contactEmail;
+              const nombre = contactName;
               run(async () => {
                 const resultado = await crearUsuario({
                   email: correo,
-                  full_name: contactName,
+                  full_name: nombre,
                   role: 'client',
                   client_id: client.id,
                 });
-                setCuentaCreada({ email: correo, clave: resultado.clave, yaExistia: resultado.yaExistia });
+                setCuentaCreada({
+                  email: correo,
+                  clave: resultado.clave,
+                  yaExistia: resultado.yaExistia,
+                  fullName: nombre,
+                  marca: client.brand_name,
+                });
                 setContactEmail('');
                 setContactName('');
               });
