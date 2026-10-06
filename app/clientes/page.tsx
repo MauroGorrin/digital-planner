@@ -21,19 +21,27 @@ export default async function ClientesPage() {
             Tus <span className="title-accent">clientes</span>
           </h1>
         </div>
-        <Link href="/clientes/nuevo" className="btn-primary">
-          + Nuevo cliente
-        </Link>
+        {profile.role === 'agency_admin' && (
+          <Link href="/clientes/nuevo" className="btn-primary">
+            + Nuevo cliente
+          </Link>
+        )}
       </div>
 
       {list.length === 0 ? (
         <EmptyState
-          title="Aún no tienes clientes"
-          description="Crea tu primer cliente para empezar a planificar contenido y compartirlo con ellos."
+          title={profile.role === 'agency_admin' ? 'Aún no tienes clientes' : 'Todavía no tienes marcas asignadas'}
+          description={
+            profile.role === 'agency_admin'
+              ? 'Crea tu primer cliente para empezar a planificar contenido y compartirlo con ellos.'
+              : 'Pide a un administrador de tu agencia que te asigne una marca desde su ficha, en Ajustes.'
+          }
           action={
-            <Link href="/clientes/nuevo" className="btn-primary">
-              + Nuevo cliente
-            </Link>
+            profile.role === 'agency_admin' ? (
+              <Link href="/clientes/nuevo" className="btn-primary">
+                + Nuevo cliente
+              </Link>
+            ) : undefined
           }
         />
       ) : (

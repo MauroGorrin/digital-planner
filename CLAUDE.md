@@ -74,6 +74,7 @@ el control.
 | Link compartible y PDF del reporte de métricas | `lib/reportes.ts` — firma HMAC-SHA256 (`clientId:anio:mes`) con `REPORT_LINK_SECRET`, sin tabla ni columna nueva. La verifica `app/reportes/[clientId]/[anio]/[mes]/page.tsx` y `app/api/reportes/pdf/route.tsx`, los dos con `createServiceClient()` (sin sesión no hay RLS que aplicar, así que la firma ES el control de acceso — nunca selecciones un campo ahí que `app/metricas/page.tsx` no seleccione ya) |
 | Validadores del alta pública | `lib/validacion-registro.ts` — los usan el formulario **y** la Server Action; una sola definición |
 | Promoción a administrador de agencia | `crear_mi_agencia()` en `supabase/migrations/0011_alta_de_agencia.sql` — el único camino de `client` a `agency_admin` que no pasa por el service role |
+| Acceso de un miembro de agencia a una marca | `has_client_access()` en `supabase/migrations/0016_restringir_acceso_por_asignacion.sql` — un `agency_admin` ve todas las marcas de su agencia; un `agency_member` solo las que tiene en `client_assignments`. Crear, asignar y desasignar marcas es solo de `agency_admin` (`requireAgencyAdmin()` en `app/admin-actions.ts` y `app/clientes/nuevo/page.tsx`). Ver el addendum en `docs/superpowers/auditoria-aislamiento-0010.md` |
 
 **Camino de un alta pública.** `/registro` (`components/FormularioDeRegistro.tsx`) valida con
 `lib/validacion-registro.ts` → Server Action `registrarAgencia` en `app/registro-actions.ts`, que

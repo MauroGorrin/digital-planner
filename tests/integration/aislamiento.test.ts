@@ -666,25 +666,46 @@ describe('un contacto de marcas de dos agencias distintas ve las dos, y sólo es
 });
 
 // ============================================================================================
-// LO QUE TIENE QUE SEGUIR FUNCIONANDO DENTRO DE UNA AGENCIA. Aislar de más es otra forma de
-// romperlo: el modelo del producto dice que cualquier usuario de agencia llega a todas las marcas
-// de SU agencia, y eso no es lo que 0010 viene a cerrar.
+// LO QUE TIENE QUE SEGUIR FUNCIONANDO DENTRO DE UNA AGENCIA, Y LO QUE 0016 CAMBIÓ A PROPÓSITO.
+//
+// Hasta 0016, el modelo era "cualquier usuario de agencia llega a todas las marcas de SU
+// agencia", y esta sección lo afirmaba literalmente usando `A.marcaSinAsignar` -- la marca de A
+// sin nadie en `client_assignments` -- como prueba de que la asignación no restringía nada.
+//
+// 0016_restringir_acceso_por_asignacion.sql invierte esa mitad: un `agency_admin` sigue llegando a
+// toda su agencia (eso NO cambia, y se prueba abajo), pero un `agency_member` ahora solo llega a
+// las marcas que tiene en `client_assignments`. `A.marcaSinAsignar` sigue siendo la marca de A sin
+// asignar -- ahora es el fixture que prueba que el miembro se queda AFUERA de ella.
 // ============================================================================================
-describe('dentro de una agencia no cambia nada', () => {
-  it('un miembro de A llega a una marca de A a la que no está asignado', async () => {
+describe('dentro de una agencia, el acceso de un miembro sigue su asignación (0016)', () => {
+  it('un miembro de A llega a la marca de A a la que SÍ está asignado', async () => {
     const { data } = await sesiones.miembroA.from('clients').select('id');
     const ids = (data ?? []).map((c) => c.id);
 
     expect(ids).toContain(A.marca);
-    expect(ids).toContain(A.marcaSinAsignar);
     expect(ids).not.toContain(B.marca);
   });
 
-  it('un miembro de A crea una pieza en esa marca sin asignar', async () => {
+  it('un miembro de A NO llega a otra marca de A a la que no está asignado', async () => {
+    const { data } = await sesiones.miembroA.from('clients').select('id');
+    const ids = (data ?? []).map((c) => c.id);
+
+    expect(ids).not.toContain(A.marcaSinAsignar);
+  });
+
+  it('un administrador de A sigue llegando a las dos marcas de A, asignado o no', async () => {
+    const { data } = await sesiones.adminA.from('clients').select('id');
+    const ids = (data ?? []).map((c) => c.id);
+
+    expect(ids).toContain(A.marca);
+    expect(ids).toContain(A.marcaSinAsignar);
+  });
+
+  it('un miembro de A crea una pieza en la marca a la que está asignado', async () => {
     const { data, error } = await sesiones.miembroA
       .from('content_pieces')
       .insert({
-        client_id: A.marcaSinAsignar,
+        client_id: A.marca,
         platform: 'instagram',
         format: 'post',
         title: 'Pieza del miembro',
@@ -697,13 +718,25 @@ describe('dentro de una agencia no cambia nada', () => {
     expect(data?.id).toBeTruthy();
   });
 
-  it('un miembro de A mueve una pieza de A por la RPC', async () => {
+  it('un miembro de A NO crea una pieza en la marca de A a la que no está asignado (42501)', async () => {
+    const { error } = await sesiones.miembroA.from('content_pieces').insert({
+      client_id: A.marcaSinAsignar,
+      platform: 'instagram',
+      format: 'post',
+      title: 'Pieza que no debería entrar',
+      scheduled_at: enUnDia(),
+    });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+  });
+
+  it('un miembro de A mueve por la RPC una pieza de la marca a la que está asignado', async () => {
     // 'cambios_solicitados' y no el 'borrador' por defecto: desde
     // 0014_endurecer_revision_interna.sql, submit_for_review solo funciona para el reenvío tras
-    // cambios del cliente. Esta prueba es sobre AISLAMIENTO por agencia (que un miembro de A siga
-    // pudiendo mover una pieza de A, asignada o no), no sobre la máquina de estados.
+    // cambios del cliente. Esta prueba es sobre AISLAMIENTO por asignación (que un miembro de A
+    // siga pudiendo mover una pieza de SU marca asignada), no sobre la máquina de estados.
     const pieza = await insertar('content_pieces', {
-      client_id: A.marcaSinAsignar,
+      client_id: A.marca,
       platform: 'instagram',
       format: 'post',
       title: 'Pieza para revisar',
@@ -717,6 +750,78 @@ describe('dentro de una agencia no cambia nada', () => {
     expect(error).toBeNull();
     const { data } = await admin.from('content_pieces').select('status').eq('id', pieza).single();
     expect(data?.status).toBe('pendiente_revision');
+  });
+
+  it('un miembro de A NO mueve por la RPC una pieza de la marca a la que no está asignado', async () => {
+    const pieza = await insertar('content_pieces', {
+      client_id: A.marcaSinAsignar,
+      platform: 'instagram',
+      format: 'post',
+      title: 'Pieza fuera de alcance',
+      scheduled_at: enUnDia(),
+      status: 'cambios_solicitados',
+      created_by: A.admin,
+    });
+
+    const { error } = await sesiones.miembroA.rpc('submit_for_review', { p_content_piece_id: pieza });
+
+    expect(error?.code).toBe(REGLA_DE_NEGOCIO);
+    const { data } = await admin.from('content_pieces').select('status').eq('id', pieza).single();
+    expect(data?.status).toBe('cambios_solicitados');
+  });
+
+  it('un miembro de A no crea una marca nueva (0016: crear una marca es solo de administrador)', async () => {
+    const { error } = await sesiones.miembroA.from('clients').insert({
+      name: 'Marca que no debería crearse',
+      brand_name: 'Marca que no debería crearse',
+      timezone: 'UTC',
+      agency_id: A.agencia,
+    });
+
+    expect(error?.code).toBe(RLS_RECHAZA);
+  });
+
+  it('un miembro de A no archiva la marca de A a la que no está asignado', async () => {
+    const { error } = await sesiones.miembroA.from('clients').update({ archived: true }).eq('id', A.marcaSinAsignar);
+
+    // PostgREST no distingue "0 filas por RLS" de "0 filas porque no hay match": sin RLS_RECHAZA
+    // explícito en un UPDATE filtrado, lo que hay que comprobar es que la fila de verdad no cambió.
+    expect(error).toBeNull();
+    const { data } = await admin.from('clients').select('archived').eq('id', A.marcaSinAsignar).single();
+    expect(data?.archived).toBe(false);
+  });
+
+  it('un miembro de A sí archiva la marca de A a la que está asignado', async () => {
+    const { error } = await sesiones.miembroA.from('clients').update({ archived: true }).eq('id', A.marca);
+
+    expect(error).toBeNull();
+    const { data } = await admin.from('clients').select('archived').eq('id', A.marca).single();
+    expect(data?.archived).toBe(true);
+
+    await admin.from('clients').update({ archived: false }).eq('id', A.marca);
+  });
+
+  it('quitar la asignación le retira el acceso de inmediato, sin cerrar sesión', async () => {
+    // `client_assignments` no cachea nada del lado de la app: `has_client_access()` la consulta en
+    // cada llamada, así que la misma sesión abierta tiene que dejar de ver la marca en el instante
+    // en que el administrador la desasigna -- no en el próximo login.
+    const temporal = await insertar('clients', {
+      name: `Temporal ${sufijo}`,
+      brand_name: 'Temporal',
+      agency_id: A.agencia,
+      timezone: 'UTC',
+    });
+    await admin.from('client_assignments').insert({ client_id: temporal, profile_id: A.miembro });
+
+    const antes = await sesiones.miembroA.from('clients').select('id').eq('id', temporal);
+    expect((antes.data ?? []).map((c) => c.id)).toContain(temporal);
+
+    await admin.from('client_assignments').delete().eq('client_id', temporal).eq('profile_id', A.miembro);
+
+    const despues = await sesiones.miembroA.from('clients').select('id').eq('id', temporal);
+    expect(despues.data ?? []).toEqual([]);
+
+    await admin.from('clients').delete().eq('id', temporal);
   });
 
   it('el contacto de A sigue aprobando una pieza de A', async () => {

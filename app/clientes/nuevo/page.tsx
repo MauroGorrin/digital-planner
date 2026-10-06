@@ -1,9 +1,10 @@
-import { requireAgency } from '@/lib/auth';
+import { requireAgencyAdmin } from '@/lib/auth';
 import { AppShell } from '@/components/AppShell';
 import { NewClientForm } from '@/components/NewClientForm';
 
 export default async function NuevoClientePage() {
-  const profile = await requireAgency();
+  // Solo administrador (0016): crear una marca y poder verla después van de la mano.
+  const profile = await requireAgencyAdmin();
   return (
     <AppShell profile={profile}>
       <div className="mx-auto max-w-lg">

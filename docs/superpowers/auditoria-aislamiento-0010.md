@@ -324,3 +324,60 @@ Las pruebas viven en `tests/integration/aislamiento.test.ts` y **prueban la capa
 datos**, no la Server Action: esa suite habla con Postgres directamente y no puede importar un módulo
 `server-only`. Lo dice el propio archivo en el comentario de ese bloque, junto con lo que esa capa
 **no** cubre.
+
+---
+
+## Addendum — `0016_restringir_acceso_por_asignacion.sql`
+
+**Fecha:** 2026-10-06.
+
+0010 dejó `has_client_access()` dando acceso a **cualquier** personal de agencia (admin o miembro)
+sobre **todas** las marcas de su agencia: `client_assignments` existía desde 0001, pero solo
+decidía a quién le llegaba una notificación (0001/0005/0007/0013/0014), nunca qué podía ver o
+escribir cada quien. 0003 ya lo anotaba en `attachments_agency_delete`: el `and has_client_access(...)`
+estaba puesto "para que un futuro acotamiento de `has_client_access()` alcance también al borrado".
+
+0016 es ese acotamiento, a pedido explícito: un `agency_admin` sigue viendo todas las marcas de su
+agencia (sin cambio); un `agency_member` ahora solo ve, abre, crea y mueve piezas de las marcas que
+tiene en `client_assignments`. El cambio vive en un solo sitio —la propia función— porque el diseño
+de 0010 ya enrutaba 40 de sus 44 usos de `is_agency()` a través de `has_client_access(client_id)`,
+en lectura **y en escritura**: `content_pieces`, `attachments`, `comments`, `ideas`,
+`client_packages`, `notification_settings`, `client_calendar_mappings`, `client_assignments` y
+`client_contacts` quedan endurecidos sin tocar ni una de esas políticas.
+
+**La única excepción real:** `clients_agency_write` era una sola política `for all` con
+`is_agency() and agency_id = mi_agencia()` -- la razón documentada en 0010 es que el `with check` de
+un INSERT no puede preguntar por una fila que no existe. El problema es que, al ser una sola
+política, esa misma comparación suelta regía también el UPDATE y el DELETE de una marca **ya
+existente**, dejando que cualquier miembro archivara o editara una marca que no tiene asignada. 0016
+la parte en tres, igual que ya está partido `content_pieces`:
+
+| Operación | Antes (0010) | Ahora (0016) |
+|---|---|---|
+| `insert` en `clients` | `is_agency() and agency_id = mi_agencia()` | `is_agency_admin() and agency_id = mi_agencia()` — crear una marca pasa a ser solo de administrador (ver más abajo) |
+| `update` en `clients` | igual que insert | `is_agency() and has_client_access(id)` |
+| `delete` en `clients` | igual que insert | `is_agency() and has_client_access(id)` |
+
+**Por qué crear una marca pasa a ser solo de administrador, y no es un recorte aparte:** una marca
+recién creada no tiene ninguna fila en `client_assignments` todavía, así que si un `agency_member`
+pudiera insertarla, su propio `.insert().select()` devolvería cero filas — el `RETURNING` de
+Postgres pasa por la política de `select` (que ya depende de `has_client_access()`), no solo por el
+`with check` del insert. `createClientEntity` (`app/admin-actions.ts`) y `/clientes/nuevo` pasan a
+`requireAgencyAdmin()` por la misma razón: la base ya lo iba a rechazar, y antes de 0016 el límite
+real era "cualquier marca de tu agencia", así que no había caso que lo deje al descubierto.
+
+**Lo que NO se tocó a propósito:** `assignTeamMember` / `removeTeamAssignment` (asignar o quitar a
+alguien de una marca) siguen gateadas solo por `requireAgencyAdmin()` en la Server Action
+(`app/admin-actions.ts`), no por una política de RLS nueva — la política `client_assignments_write`
+sigue siendo `is_agency() and has_client_access(client_id)`, igual que antes de 0016. Es la misma
+asimetría que ya tenía `client_contacts_write` (la creación de un contacto solo la gatea
+`requireAgencyAdmin()` dentro de `crearUsuario`, no la política): un miembro asignado a una marca
+podría, a nivel de base, reasignar a otra persona de esa misma marca si llamara a la tabla
+directamente. Documentado aquí, no cerrado, por paridad con un patrón que el propio 0010 ya
+aceptaba en otro sitio — cerrarlo es un cambio aparte si hace falta.
+
+**Pruebas:** `tests/integration/aislamiento.test.ts`, bloque
+`'dentro de una agencia, el acceso de un miembro sigue su asignación (0016)'`. Reemplaza al bloque
+`'dentro de una agencia no cambia nada'` que 0010 había escrito con la afirmación contraria (que un
+miembro SÍ llegaba a una marca sin asignar) — esa afirmación queda invertida a propósito, no es una
+prueba que "se rompió".

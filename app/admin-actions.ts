@@ -17,7 +17,11 @@ export async function createClientEntity(input: {
   billing_mode: ClientBillingMode;
   quotas?: Partial<Record<ContentFormat, number>>;
 }) {
-  const profile = await requireAgency();
+  // Admin, no cualquier miembro: crear una marca es lo único de `clients` que no puede pasar por
+  // `has_client_access()` (0016) -- nace sin asignación, así que un miembro la crearía y acto
+  // seguido no podría ni verla. El administrador la crea y luego la asigna desde la ficha del
+  // cliente.
+  const profile = await requireAgencyAdmin();
   const supabase = await createClient();
   const { name, brand_name, timezone, notes, billing_mode, quotas } = input;
 
@@ -268,7 +272,9 @@ export async function removeClientContact(clientId: string, profileId: string) {
 }
 
 export async function removeTeamAssignment(clientId: string, profileId: string) {
-  await requireAgency();
+  // Admin, no cualquier miembro (0016): quién trabaja en qué marca lo decide la agencia, no cada
+  // persona del equipo por su cuenta.
+  await requireAgencyAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from('client_assignments').delete().eq('client_id', clientId).eq('profile_id', profileId);
   if (error) throw errorParaElCliente(error, 'removeTeamAssignment');
@@ -276,7 +282,9 @@ export async function removeTeamAssignment(clientId: string, profileId: string) 
 }
 
 export async function assignTeamMember(clientId: string, profileId: string) {
-  await requireAgency();
+  // Admin, no cualquier miembro (0016): ver "Asignar" en la ficha de un cliente no basta para
+  // repartir el acceso a esa marca entre el equipo.
+  await requireAgencyAdmin();
   const supabase = await createClient();
   const { error } = await supabase.from('client_assignments').upsert({ client_id: clientId, profile_id: profileId }, { onConflict: 'client_id,profile_id' });
   if (error) throw errorParaElCliente(error, 'assignTeamMember');

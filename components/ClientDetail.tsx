@@ -164,27 +164,33 @@ export function ClientDetail({
           {assignments.map((a) => (
             <li key={a.profile_id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-1.5 text-sm">
               <span>{a.profiles?.full_name ?? a.profile_id}</span>
-              <button onClick={() => run(() => removeTeamAssignment(client.id, a.profile_id))} className="text-xs text-red-500 hover:underline">
-                Quitar
-              </button>
+              {profile.role === 'agency_admin' && (
+                <button onClick={() => run(() => removeTeamAssignment(client.id, a.profile_id))} className="text-xs text-red-500 hover:underline">
+                  Quitar
+                </button>
+              )}
             </li>
           ))}
         </ul>
-        {team.length > 0 ? (
-          <div className="flex gap-2">
-            <select value={teamPick} onChange={(e) => setTeamPick(e.target.value)} className="filter-select flex-1">
-              {team.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.full_name}
-                </option>
-              ))}
-            </select>
-            <button onClick={() => run(() => assignTeamMember(client.id, teamPick))} className="btn-secondary">
-              Asignar
-            </button>
-          </div>
+        {profile.role === 'agency_admin' ? (
+          team.length > 0 ? (
+            <div className="flex gap-2">
+              <select value={teamPick} onChange={(e) => setTeamPick(e.target.value)} className="filter-select flex-1">
+                {team.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => run(() => assignTeamMember(client.id, teamPick))} className="btn-secondary">
+                Asignar
+              </button>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Invita miembros del equipo desde Ajustes.</p>
+          )
         ) : (
-          <p className="text-sm text-slate-400">Invita miembros del equipo desde Ajustes.</p>
+          <p className="text-sm text-slate-400">Solo un administrador puede asignar o quitar personas de esta marca.</p>
         )}
       </div>
 

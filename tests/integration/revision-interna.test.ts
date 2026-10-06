@@ -134,8 +134,13 @@ beforeAll(async () => {
     created_by: ids.adminA,
   });
 
-  // adminA queda asignado a marcaA; adminA2 NO -- es justo la asimetría que prueba el caso 9.
+  // adminA queda asignado a marcaA; adminA2 NO -- es justo la asimetría que prueba el caso 9 (un
+  // agency_admin no necesita estar en client_assignments: 0016 le da acceso a toda su agencia
+  // igual). miembroA SÍ necesita la fila -- a diferencia de un admin, un agency_member solo
+  // accede a las marcas que tiene asignadas, y este archivo lo usa para enviar a revisión interna,
+  // aprobarla y pedir cambios sobre marcaA de principio a fin.
   await insertar('client_assignments', { client_id: ids.marcaA, profile_id: ids.adminA });
+  await insertar('client_assignments', { client_id: ids.marcaA, profile_id: ids.miembroA });
   await insertar('client_contacts', { client_id: ids.marcaA, profile_id: ids.contactoA });
 });
 
