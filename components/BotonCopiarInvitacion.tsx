@@ -8,7 +8,17 @@ import { mensajeDeInvitacion } from '@/lib/invitacion';
  * mismo mensaje de invitación que `PanelDeCuentaCreada`, sin credenciales, para reenviarle el
  * enlace a quien lo haya perdido o lo esté pidiendo de nuevo.
  */
-export function BotonCopiarInvitacion({ fullName, email, marca }: { fullName: string; email: string; marca: string }) {
+export function BotonCopiarInvitacion({
+  fullName,
+  email,
+  marca,
+  agencyName,
+}: {
+  fullName: string;
+  email: string;
+  marca: string;
+  agencyName?: string;
+}) {
   const [copiada, setCopiada] = useState(false);
 
   async function copiar() {
@@ -17,6 +27,7 @@ export function BotonCopiarInvitacion({ fullName, email, marca }: { fullName: st
       marca,
       email,
       baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
+      agencyName,
     });
     try {
       await navigator.clipboard.writeText(mensaje);

@@ -6,6 +6,10 @@
  *
  * Sin `clave` arma un mensaje más corto, para cuando la cuenta ya existía y solo se le vinculó a
  * una marca nueva -- no hay credenciales que mostrar, solo avisarle que ya tiene acceso.
+ *
+ * `/` en el valor de `redirect` no necesita escaparse (no es un carácter reservado dentro de un
+ * parámetro de consulta, RFC 3986) -- `encodeURIComponent` lo convertía en `%2Fgrilla`, que se ve
+ * como una URL rota al pegarla en un mensaje. `/login?redirect=/grilla` es la misma URL, sin eso.
  */
 export function mensajeDeInvitacion(input: {
   fullName: string;
@@ -13,22 +17,29 @@ export function mensajeDeInvitacion(input: {
   email: string;
   clave?: string;
   baseUrl: string;
+  /** Nombre de la agencia que invita. Sin esto, el mensaje no firma con ningún nombre. */
+  agencyName?: string;
 }): string {
-  const enlace = `${input.baseUrl}/login?redirect=%2Fgrilla`;
+  const enlace = `${input.baseUrl}/login?redirect=/grilla`;
+  const firma = input.agencyName ? `\n\nSaludos,\n${input.agencyName}` : '';
 
   if (!input.clave) {
     return (
-      `Hola ${input.fullName}, ya tienes acceso para revisar y aprobar el contenido de ${input.marca}.\n\n` +
-      `Entra con tu cuenta de siempre: ${enlace}`
+      `Hola ${input.fullName}:\n\n` +
+      `Ya tienes acceso para revisar y aprobar el contenido de ${input.marca}.\n\n` +
+      `Ingresa con tu cuenta en: ${enlace}` +
+      firma
     );
   }
 
   return (
-    `Hola ${input.fullName}, ya puedes revisar y aprobar el contenido de ${input.marca}.\n\n` +
-    `Entra aquí: ${enlace}\n` +
+    `Hola ${input.fullName}:\n\n` +
+    `Ya puedes revisar y aprobar el contenido de ${input.marca}.\n\n` +
+    `Enlace de acceso: ${enlace}\n` +
     `Usuario: ${input.email}\n` +
-    `Clave: ${input.clave}\n\n` +
-    `Puedes cambiar la clave después desde tu perfil.`
+    `Contraseña temporal: ${input.clave}\n\n` +
+    `Puedes cambiar tu contraseña luego desde tu perfil.` +
+    firma
   );
 }
 

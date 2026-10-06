@@ -71,6 +71,7 @@ function renderFicha(profile: Profile = crearPerfil()) {
       notificationSettings={null}
       calendarMapping={null}
       connections={[]}
+      agencyName="Agencia de prueba"
     />
   );
 }

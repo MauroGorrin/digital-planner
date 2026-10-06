@@ -33,6 +33,7 @@ export function ClientDetail({
   notificationSettings,
   calendarMapping,
   connections,
+  agencyName,
 }: {
   profile: Profile;
   client: Client;
@@ -42,6 +43,8 @@ export function ClientDetail({
   notificationSettings: { email_on_pending_review: boolean; email_on_client_response: boolean; reminder_after_days: number } | null;
   calendarMapping: { connection_id: string } | null;
   connections: { id: string; label: string; calendar_id: string }[];
+  /** Firma el mensaje de invitación. Vacío si la agencia todavía no tiene nombre. */
+  agencyName: string;
 }) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
@@ -206,7 +209,12 @@ export function ClientDetail({
               </span>
               <div className="flex items-center gap-3">
                 {c.profiles && (
-                  <BotonCopiarInvitacion fullName={c.profiles.full_name} email={c.profiles.email} marca={client.brand_name} />
+                  <BotonCopiarInvitacion
+                    fullName={c.profiles.full_name}
+                    email={c.profiles.email}
+                    marca={client.brand_name}
+                    agencyName={agencyName}
+                  />
                 )}
                 <button onClick={() => run(() => removeClientContact(client.id, c.profile_id))} className="text-xs text-red-500 hover:underline">
                   Quitar
@@ -238,6 +246,7 @@ export function ClientDetail({
                   yaExistia: resultado.yaExistia,
                   fullName: nombre,
                   marca: client.brand_name,
+                  agencyName,
                 });
                 setContactEmail('');
                 setContactName('');

@@ -12,6 +12,8 @@ export interface CuentaCreada {
   fullName?: string;
   /** Marca a la que queda vinculada. Si viene, se ofrece una invitación lista para enviar. */
   marca?: string;
+  /** Firma el mensaje de invitación. */
+  agencyName?: string;
 }
 
 /**
@@ -121,6 +123,7 @@ function BloqueDeInvitacion({ cuenta }: { cuenta: CuentaCreada }) {
     email: cuenta.email,
     clave: cuenta.clave,
     baseUrl: typeof window !== 'undefined' ? window.location.origin : '',
+    agencyName: cuenta.agencyName,
   });
 
   async function copiarInvitacion() {

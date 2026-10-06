@@ -15,7 +15,9 @@ describe('mensajeDeInvitacion', () => {
     expect(mensaje).toContain('Mamalactea');
     expect(mensaje).toContain('ana@cliente.com');
     expect(mensaje).toContain('xyz123');
-    expect(mensaje).toContain('https://app.ejemplo.com/login?redirect=%2Fgrilla');
+    // Sin codificar: %2Fgrilla se pega como una URL rota en WhatsApp/correo.
+    expect(mensaje).toContain('https://app.ejemplo.com/login?redirect=/grilla');
+    expect(mensaje).not.toContain('%2F');
   });
 
   it('sin clave, no promete ninguna y avisa que ya tiene cuenta', () => {
@@ -27,8 +29,27 @@ describe('mensajeDeInvitacion', () => {
     });
 
     expect(mensaje).not.toMatch(/clave/i);
-    expect(mensaje).toContain('ya tienes acceso');
-    expect(mensaje).toContain('https://app.ejemplo.com/login?redirect=%2Fgrilla');
+    expect(mensaje).toMatch(/ya tienes acceso/i);
+    expect(mensaje).toContain('https://app.ejemplo.com/login?redirect=/grilla');
+  });
+
+  it('con agencyName, firma el mensaje; sin él, no firma con nadie', () => {
+    const conFirma = mensajeDeInvitacion({
+      fullName: 'Ana',
+      marca: 'Mamalactea',
+      email: 'ana@cliente.com',
+      baseUrl: 'https://app.ejemplo.com',
+      agencyName: 'Libélula Social Media',
+    });
+    const sinFirma = mensajeDeInvitacion({
+      fullName: 'Ana',
+      marca: 'Mamalactea',
+      email: 'ana@cliente.com',
+      baseUrl: 'https://app.ejemplo.com',
+    });
+
+    expect(conFirma).toContain('Saludos,\nLibélula Social Media');
+    expect(sinFirma).not.toContain('Saludos');
   });
 });
 

@@ -18,6 +18,7 @@ export default async function ClienteDetailPage(props: { params: Promise<{ id: s
     { data: notificationSettings },
     { data: calendarMapping },
     { data: connections },
+    { data: agencia },
   ] = await Promise.all([
     supabase.from('clients').select('*').eq('id', params.id).single(),
     supabase.from('client_assignments').select('profile_id, profiles(id,full_name,email)').eq('client_id', params.id),
@@ -26,6 +27,9 @@ export default async function ClienteDetailPage(props: { params: Promise<{ id: s
     supabase.from('notification_settings').select('*').eq('client_id', params.id).maybeSingle(),
     supabase.from('client_calendar_mappings').select('connection_id').eq('client_id', params.id).maybeSingle(),
     profile.role === 'agency_admin' ? supabase.from('google_calendar_connections').select('id,label,calendar_id') : Promise.resolve({ data: [] }),
+    // Para firmar el mensaje de invitación con el nombre de la agencia. La política agencies_select
+    // (0010) solo deja leer la fila propia.
+    supabase.from('agencies').select('name').eq('id', profile.agency_id ?? '').maybeSingle(),
   ]);
 
   if (!client) notFound();
@@ -41,6 +45,7 @@ export default async function ClienteDetailPage(props: { params: Promise<{ id: s
         notificationSettings={notificationSettings as any}
         calendarMapping={calendarMapping as any}
         connections={(connections ?? []) as any[]}
+        agencyName={agencia?.name ?? ''}
       />
     </AppShell>
   );
