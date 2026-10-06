@@ -60,4 +60,16 @@ describe('GrillaDeContenido', () => {
     expect(screen.getByText('No hay contenido aprobado o programado todavía.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Todas/ })).not.toBeInTheDocument();
   });
+
+  it('sin stickyFiltro la barra de redes no queda fija (vista de la app)', () => {
+    render(<GrillaDeContenido piezas={[crearVista()]} />);
+
+    expect(screen.getByRole('group', { name: 'Filtrar por plataforma' })).not.toHaveClass('sticky');
+  });
+
+  it('con stickyFiltro la barra de redes queda fija arriba (presentación pública)', () => {
+    render(<GrillaDeContenido piezas={[crearVista()]} stickyFiltro />);
+
+    expect(screen.getByRole('group', { name: 'Filtrar por plataforma' })).toHaveClass('sticky');
+  });
 });
