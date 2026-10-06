@@ -44,3 +44,24 @@ de cada red social, para que la agencia y el cliente revisen la estrategia visua
   `remotePatterns` para todas las marcas. `eslint` puede marcar `@next/next/no-img-element`; se
   desactiva solo en esas líneas, con comentario.
 - Sin nuevas dependencias.
+
+## Addendum — 2026-10-06: la grilla pasa a ser también la cola de aprobación del cliente
+
+Este spec decía, en **Fuera de alcance**: "Ningún estado de revisión (...) aparece aquí, nunca."
+Eso deja de ser cierto para un `pendiente_revision`, y solo para el contacto de cliente que lo
+puede aprobar:
+
+- `cargarVistasDeGrilla` (`lib/grilla-datos.ts`) acepta ahora un filtro `estados`. La ruta pública
+  (`/grilla/[slug]/[anio]/[mes]`) sigue pasando siempre `ESTADOS_EN_GRILLA` (aprobado, programado,
+  publicado) -- ahí no hay sesión que distinga a un cliente de un desconocido con el enlace, así
+  que nada en revisión puede aparecer, sin excepción. La grilla privada (`app/grilla/page.tsx`)
+  amplía esto a `pendiente_revision`, pero **solo si `profile.role === 'client'`**: para la agencia
+  no cambia nada.
+- Esas piezas pendientes se muestran en una sección nueva, `RevisionDeCliente`, antes del feed de
+  lo ya aprobado: cada una con la tarjeta real de su red (reutiliza `VISTA_POR_PLATAFORMA`, ahora en
+  `lib/grilla-vistas.ts`) y, debajo, `AccionesDeAprobacion` -- las mismas Server Actions
+  `approvePiece` / `requestPieceChanges` que ya usaba `ContentPieceDetail.tsx`, no un camino nuevo
+  de autorización. La grilla le da un segundo lugar desde donde llamarlas, no un permiso nuevo:
+  quien puede aprobar sigue siendo exactamente quien ya podía.
+- `borrador`, `pendiente_revision_interna` y `cambios_solicitados` siguen sin aparecer nunca en
+  ninguna de las dos pantallas.

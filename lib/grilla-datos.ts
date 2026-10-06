@@ -1,10 +1,14 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adjuntoDePortada } from '@/lib/attachments';
 import type { VistaPieza } from '@/lib/grilla';
-import type { Attachment, ContentPiece } from '@/types/database';
+import type { Attachment, ContentPiece, ContentStatus } from '@/types/database';
 
-/** Solo estados públicos para la grilla. Nunca aparecen aquí los de revisión. */
-export const ESTADOS_EN_GRILLA = ['aprobado', 'programado', 'publicado'];
+/**
+ * Los estados que puede ver cualquiera con el enlace, firmado o no -- la presentación pública
+ * (`app/grilla/[slug]/[anio]/[mes]/page.tsx`) SIEMPRE pasa estos, nunca otros: ahí no hay sesión
+ * que distinga un cliente de un desconocido, así que nada que siga en revisión puede aparecer.
+ */
+export const ESTADOS_EN_GRILLA: ContentStatus[] = ['aprobado', 'programado', 'publicado'];
 
 type Cliente = { brand_name: string; timezone: string; slug: string };
 
@@ -20,12 +24,18 @@ export interface FiltrosDeGrilla {
   desde?: string;
   hasta?: string;
   orden: 'asc' | 'desc';
+  /**
+   * Qué estados trae. Por defecto `ESTADOS_EN_GRILLA` -- la ruta pública nunca debe pasar otra
+   * cosa. La grilla privada sí amplía esto a `pendiente_revision` para un contacto de cliente: ahí
+   * SÍ hay sesión, y es la cola desde la que aprueba o pide cambios (RevisionDeCliente).
+   */
+  estados?: ContentStatus[];
 }
 
 /**
- * Carga las piezas públicas de la grilla y les firma la portada. Recibe el cliente de Supabase ya
- * elegido por quien llama: sesión (la RLS decide) en la app, servicio en la ruta pública (la firma
- * del enlace es el control de acceso). Esta función no decide permisos por sí misma.
+ * Carga las piezas de la grilla y les firma la portada. Recibe el cliente de Supabase ya elegido
+ * por quien llama: sesión (la RLS decide) en la app, servicio en la ruta pública (la firma del
+ * enlace es el control de acceso). Esta función no decide permisos por sí misma.
  */
 export async function cargarVistasDeGrilla(
   supabase: SupabaseClient,
@@ -34,7 +44,7 @@ export async function cargarVistasDeGrilla(
   let consulta = supabase
     .from('content_pieces')
     .select('id,client_id,platform,format,title,copy_text,scheduled_at,status,clients(brand_name,timezone,slug)')
-    .in('status', ESTADOS_EN_GRILLA)
+    .in('status', filtros.estados ?? ESTADOS_EN_GRILLA)
     .order('scheduled_at', { ascending: filtros.orden === 'asc' });
   if (filtros.clientId) consulta = consulta.eq('client_id', filtros.clientId);
   if (filtros.desde) consulta = consulta.gte('scheduled_at', filtros.desde);

@@ -234,6 +234,7 @@ export async function approvePiece(id: string, note?: string) {
   }
   revalidatePath('/calendario');
   revalidatePath('/pendientes');
+  revalidatePath('/grilla');
   revalidatePath(`/piezas/${id}`);
 }
 
@@ -250,6 +251,7 @@ export async function requestPieceChanges(id: string, note: string) {
   }
   revalidatePath('/calendario');
   revalidatePath('/pendientes');
+  revalidatePath('/grilla');
   revalidatePath(`/piezas/${id}`);
 }
 

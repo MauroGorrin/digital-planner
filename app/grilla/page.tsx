@@ -4,10 +4,12 @@ import { createClient } from '@/lib/supabase/server';
 import { AppShell } from '@/components/AppShell';
 import { EmptyState } from '@/components/EmptyState';
 import { GrillaDeContenido } from '@/components/GrillaDeContenido';
+import { RevisionDeCliente } from '@/components/RevisionDeCliente';
 import { BotonCopiarLink } from '@/components/BotonCopiarLink';
-import { cargarVistasDeGrilla } from '@/lib/grilla-datos';
+import { cargarVistasDeGrilla, ESTADOS_EN_GRILLA } from '@/lib/grilla-datos';
 import { compartirReportesHabilitado } from '@/lib/reportes';
 import { mesDePieza, tituloDelMes, urlDeLaGrilla } from '@/lib/grilla-compartir';
+import type { ContentStatus } from '@/types/database';
 
 interface ClienteDeGrilla {
   id: string;
@@ -21,7 +23,12 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
   // Sesión, no servicio: la RLS decide qué piezas y marcas puede leer cada usuario -- desde 0016,
   // eso ya incluye que un agency_member solo vea las marcas que tiene asignadas.
   const supabase = await createClient();
-  const vistas = await cargarVistasDeGrilla(supabase, { orden: 'desc' });
+  // Un contacto de cliente ve además lo `pendiente_revision`: es su cola de aprobación
+  // (RevisionDeCliente, más abajo). La agencia y la ruta pública nunca ven nada que siga en
+  // revisión -- ESTADOS_EN_GRILLA a secas, sin ampliar.
+  const estados: ContentStatus[] | undefined =
+    profile.role === 'client' ? [...ESTADOS_EN_GRILLA, 'pendiente_revision'] : undefined;
+  const vistas = await cargarVistasDeGrilla(supabase, { orden: 'desc', estados });
 
   // Las marcas con contenido aquí, en el orden en que aparecen: una por `client_id`, sin repetir.
   const porCliente = new Map<string, ClienteDeGrilla>();
@@ -34,9 +41,13 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
   const clienteActivo = clientes.find((c) => c.id === searchParams.cliente) ?? clientes[0] ?? null;
   const vistasDelCliente = clienteActivo ? vistas.filter((v) => v.client_id === clienteActivo.id) : [];
 
-  // Un enlace por mes que tenga contenido público, solo de la marca que se está viendo.
+  const pendientesDeAprobar = vistasDelCliente.filter((v) => v.status === 'pendiente_revision');
+  const vistasPublicables = vistasDelCliente.filter((v) => v.status !== 'pendiente_revision');
+
+  // Un enlace por mes que tenga contenido público, solo de la marca que se está viendo. Nunca sale
+  // de `pendiente_revision`: ese link lo puede abrir cualquiera que lo tenga, sin sesión.
   const meses = new Map<string, { slug: string; marca: string; anio: number; mes: number }>();
-  for (const pieza of vistasDelCliente) {
+  for (const pieza of vistasPublicables) {
     const { anio, mes } = mesDePieza(pieza.scheduled_at, pieza.timezone);
     const clave = `${pieza.client_id}|${anio}|${mes}`;
     if (!meses.has(clave)) meses.set(clave, { slug: pieza.client_slug, marca: pieza.brand_name, anio, mes });
@@ -49,13 +60,17 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
     <AppShell profile={profile}>
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Grilla de contenido</h1>
-        <p className="text-sm text-slate-500">Cómo se verá el contenido aprobado o programado en cada red.</p>
+        <p className="text-sm text-slate-500">
+          {profile.role === 'client'
+            ? 'Cómo se verá tu contenido en cada red. Lo pendiente de tu aprobación va primero.'
+            : 'Cómo se verá el contenido aprobado o programado en cada red.'}
+        </p>
       </div>
 
       {clientes.length === 0 ? (
         <EmptyState
           title="Nada que mostrar"
-          description="No hay contenido aprobado o programado todavía en ninguna de tus marcas."
+          description="No hay contenido aprobado, programado ni pendiente de revisión todavía en ninguna de tus marcas."
         />
       ) : (
         <>
@@ -78,7 +93,9 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
             </div>
           )}
 
-          {enlaces.length > 0 && (
+          <RevisionDeCliente piezas={pendientesDeAprobar} />
+
+          {profile.role !== 'client' && enlaces.length > 0 && (
             <section aria-labelledby="compartir-grilla" className="card mb-6 space-y-3">
               <h2 id="compartir-grilla" className="text-base font-semibold text-slate-800">
                 Compartir {clienteActivo?.marca ?? ''} con el cliente
@@ -108,7 +125,7 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
             </section>
           )}
 
-          <GrillaDeContenido piezas={vistasDelCliente} />
+          <GrillaDeContenido piezas={vistasPublicables} />
         </>
       )}
     </AppShell>
