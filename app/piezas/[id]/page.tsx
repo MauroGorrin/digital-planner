@@ -32,7 +32,18 @@ export default async function ContentPiecePage(props: { params: Promise<{ id: st
       .order('created_at', { ascending: false }),
   ]);
 
-  const isClientContact = profile.role === 'client';
+  // Quién puede aprobar o pedir cambios se decide por `client_contacts`, no por el rol: un
+  // `agency_admin` en "modo de prueba" (app/admin-actions.ts) también queda en esa tabla, y tiene
+  // que ver los mismos botones que vería el cliente real -- la RPC detrás ya lo exige igual
+  // (`approve_content_piece` rechaza a cualquiera que no esté en `client_contacts`, sea cual sea su
+  // rol), así que esto solo deja de ocultar en la UI lo que la base ya autorizaría.
+  const { data: filaDeContacto } = await supabase
+    .from('client_contacts')
+    .select('id')
+    .eq('client_id', piece.client_id)
+    .eq('profile_id', profile.id)
+    .maybeSingle();
+  const isClientContact = filaDeContacto !== null;
 
   const listaAdjuntos = (attachments ?? []) as Attachment[];
 

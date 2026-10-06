@@ -374,3 +374,40 @@ export async function renombrarMiAgencia(nombre: string) {
   if (error) throw errorParaElCliente(error, 'renombrarMiAgencia');
   revalidatePath('/ajustes');
 }
+
+/**
+ * Modo de prueba: vuelve al administrador que llama contacto de TODAS las marcas de su agencia, de
+ * una sola vez. `client_contacts` no exige rol 'client' en `profile_id` -- nada nuevo se abre aquí,
+ * es lo mismo que ya podía hacer uno por uno desde "Contactos del cliente" con su propio correo
+ * (`crearUsuario` lo habría vinculado igual, por ser `yaExistia`), solo que para todas a la vez.
+ *
+ * No es una vista simulada: a partir de aquí, aprobar o pedir cambios queda registrado con el
+ * `profile_id` de quien llama, como cualquier aprobación real (`approve_content_piece` exige
+ * `client_contacts`, sin excepción para administradores).
+ */
+export async function activarModoDePrueba() {
+  const profile = await requireAgencyAdmin();
+  const supabase = await createClient();
+  const { data: marcas, error: errorMarcas } = await supabase.from('clients').select('id');
+  if (errorMarcas) throw errorParaElCliente(errorMarcas, 'activarModoDePrueba:marcas');
+
+  const filas = (marcas ?? []).map((m) => ({ client_id: m.id as string, profile_id: profile.id }));
+  if (filas.length > 0) {
+    const { error } = await supabase.from('client_contacts').upsert(filas, { onConflict: 'client_id,profile_id' });
+    if (error) throw errorParaElCliente(error, 'activarModoDePrueba');
+  }
+  revalidatePath('/ajustes');
+  revalidatePath('/grilla');
+  revalidatePath('/clientes');
+}
+
+/** Quita al administrador que llama de `client_contacts` en todas las marcas -- apaga el modo de prueba. */
+export async function desactivarModoDePrueba() {
+  const profile = await requireAgencyAdmin();
+  const supabase = await createClient();
+  const { error } = await supabase.from('client_contacts').delete().eq('profile_id', profile.id);
+  if (error) throw errorParaElCliente(error, 'desactivarModoDePrueba');
+  revalidatePath('/ajustes');
+  revalidatePath('/grilla');
+  revalidatePath('/clientes');
+}

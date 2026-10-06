@@ -5,6 +5,7 @@ import { WebhookSettings } from '@/components/WebhookSettings';
 import { GoogleCalendarSettings } from '@/components/GoogleCalendarSettings';
 import { TeamInvite } from '@/components/TeamInvite';
 import { NombreDeAgencia } from '@/components/NombreDeAgencia';
+import { ModoDePrueba } from '@/components/ModoDePrueba';
 import type { Profile } from '@/types/database';
 
 // El callback de OAuth ya no reenvía el mensaje de Postgres en la URL, solo uno de estos códigos
@@ -24,13 +25,16 @@ export default async function AjustesPage(props: { searchParams: Promise<{ error
   const profile = await requireAgencyAdmin();
   const supabase = await createClient();
 
-  const [{ data: webhooks }, { data: connections }, { data: team }, { data: agencia }] = await Promise.all([
-    supabase.from('webhook_configs').select('id,name,url,active,events,created_at').order('created_at', { ascending: false }),
-    supabase.from('google_calendar_connections').select('id,label,calendar_id,created_at').order('created_at', { ascending: false }),
-    supabase.from('profiles').select('*').in('role', ['agency_admin', 'agency_member']).order('full_name'),
-    // La política agencies_select (0010) sólo deja leer la fila propia; el filtro es por claridad.
-    supabase.from('agencies').select('name').eq('id', profile.agency_id ?? '').maybeSingle(),
-  ]);
+  const [{ data: webhooks }, { data: connections }, { data: team }, { data: agencia }, { count: contactosPropios }] =
+    await Promise.all([
+      supabase.from('webhook_configs').select('id,name,url,active,events,created_at').order('created_at', { ascending: false }),
+      supabase.from('google_calendar_connections').select('id,label,calendar_id,created_at').order('created_at', { ascending: false }),
+      supabase.from('profiles').select('*').in('role', ['agency_admin', 'agency_member']).order('full_name'),
+      // La política agencies_select (0010) sólo deja leer la fila propia; el filtro es por claridad.
+      supabase.from('agencies').select('name').eq('id', profile.agency_id ?? '').maybeSingle(),
+      // Si ya tengo alguna fila en client_contacts, el modo de prueba está activo.
+      supabase.from('client_contacts').select('id', { count: 'exact', head: true }).eq('profile_id', profile.id),
+    ]);
 
   return (
     <AppShell profile={profile}>
@@ -50,6 +54,11 @@ export default async function AjustesPage(props: { searchParams: Promise<{ error
           <h2 className="mb-1 text-sm font-semibold text-slate-800">Equipo de la agencia</h2>
           <p className="mb-3 text-xs text-slate-500">Crea la cuenta de un nuevo miembro del equipo. La clave se muestra una sola vez, al crearla.</p>
           <TeamInvite team={(team ?? []) as Profile[]} />
+        </section>
+
+        <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
+          <h2 className="mb-1 text-sm font-semibold text-slate-800">Modo de prueba: revisar como cliente</h2>
+          <ModoDePrueba activo={(contactosPropios ?? 0) > 0} />
         </section>
 
         <section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">

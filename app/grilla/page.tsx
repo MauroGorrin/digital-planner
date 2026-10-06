@@ -23,11 +23,19 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
   // Sesión, no servicio: la RLS decide qué piezas y marcas puede leer cada usuario -- desde 0016,
   // eso ya incluye que un agency_member solo vea las marcas que tiene asignadas.
   const supabase = await createClient();
-  // Un contacto de cliente ve además lo `pendiente_revision`: es su cola de aprobación
-  // (RevisionDeCliente, más abajo). La agencia y la ruta pública nunca ven nada que siga en
-  // revisión -- ESTADOS_EN_GRILLA a secas, sin ampliar.
+
+  // Quién tiene cola de aprobación no lo decide el rol, sino `client_contacts`: un cliente real
+  // siempre está ahí, y un `agency_admin` en "modo de prueba" (Ajustes) también -- las mismas
+  // marcas que la RPC detrás de Aprobar/Pedir cambios ya exige. Sin ninguna fila, nadie tiene cola.
+  const { data: misContactos } = await supabase.from('client_contacts').select('client_id').eq('profile_id', profile.id);
+  const marcasDondeSoyContacto = new Set((misContactos ?? []).map((c) => c.client_id as string));
+
+  // La ruta pública nunca ve nada en revisión. Aquí sí se amplía a `pendiente_revision` en cuanto
+  // hay al menos una marca donde la sesión es contacto -- RLS igual solo entrega lo que cada quien
+  // puede leer; lo que filtra `pendientesDeAprobar` más abajo es que además SEA su cola, no la de
+  // una marca ajena que la agencia también puede ver por ser de su propia cartera.
   const estados: ContentStatus[] | undefined =
-    profile.role === 'client' ? [...ESTADOS_EN_GRILLA, 'pendiente_revision'] : undefined;
+    marcasDondeSoyContacto.size > 0 ? [...ESTADOS_EN_GRILLA, 'pendiente_revision'] : undefined;
   const vistas = await cargarVistasDeGrilla(supabase, { orden: 'desc', estados });
 
   // Las marcas con contenido aquí, en el orden en que aparecen: una por `client_id`, sin repetir.
@@ -41,7 +49,9 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
   const clienteActivo = clientes.find((c) => c.id === searchParams.cliente) ?? clientes[0] ?? null;
   const vistasDelCliente = clienteActivo ? vistas.filter((v) => v.client_id === clienteActivo.id) : [];
 
-  const pendientesDeAprobar = vistasDelCliente.filter((v) => v.status === 'pendiente_revision');
+  const pendientesDeAprobar = vistasDelCliente.filter(
+    (v) => v.status === 'pendiente_revision' && marcasDondeSoyContacto.has(v.client_id)
+  );
   const vistasPublicables = vistasDelCliente.filter((v) => v.status !== 'pendiente_revision');
 
   // Un enlace por mes que tenga contenido público, solo de la marca que se está viendo. Nunca sale
@@ -61,7 +71,7 @@ export default async function GrillaPage(props: { searchParams: Promise<{ client
       <div className="mb-6">
         <h1 className="text-xl font-semibold text-slate-900">Grilla de contenido</h1>
         <p className="text-sm text-slate-500">
-          {profile.role === 'client'
+          {marcasDondeSoyContacto.size > 0
             ? 'Cómo se verá tu contenido en cada red. Lo pendiente de tu aprobación va primero.'
             : 'Cómo se verá el contenido aprobado o programado en cada red.'}
         </p>
