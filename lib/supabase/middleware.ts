@@ -56,6 +56,9 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/login') ||
     path.startsWith('/registro') ||
     path.startsWith('/auth/callback') ||
+    // Política de privacidad: la pide Google Cloud (Branding → privacy policy link) para el login
+    // con Google, y cualquiera -- con cuenta o sin ella -- tiene que poder leerla sin iniciar sesión.
+    path.startsWith('/privacidad') ||
     path.startsWith('/reportes') ||
     path.startsWith('/api/reportes/pdf') ||
     /^\/grilla\/[^/]+\/\d{4}\/\d{1,2}\/?$/.test(path) ||

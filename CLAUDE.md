@@ -70,7 +70,7 @@ el control.
 | Firma HMAC de webhooks (`X-Planner-Signature`) | `lib/webhooks/dispatch.ts` |
 | Fecha/hora con zona horaria del cliente | `lib/date-utils.ts`, `lib/tz.ts` |
 | Sesión y cliente de Supabase en servidor | `lib/supabase/server.ts` (`createClient` con cookies, `createServiceClient` con service role) |
-| Rutas públicas (sin sesión) | `lib/supabase/middleware.ts` — hoy `/login`, `/registro`, `/reportes`, `/api/reportes/pdf` y `/grilla/[slug]/[anio]/[mes]` (solo esa forma exacta; `/grilla` a secas es la app). Agregar una ruta pública se hace ahí y solo ahí |
+| Rutas públicas (sin sesión) | `lib/supabase/middleware.ts` — hoy `/login`, `/registro`, `/auth/callback`, `/privacidad`, `/reportes`, `/api/reportes/pdf` y `/grilla/[slug]/[anio]/[mes]` (solo esa forma exacta; `/grilla` a secas es la app). Agregar una ruta pública se hace ahí y solo ahí |
 | Link compartible y PDF del reporte de métricas | `lib/reportes.ts` — firma HMAC-SHA256 (`clientId:anio:mes`) con `REPORT_LINK_SECRET`, sin tabla ni columna nueva. La verifica `app/reportes/[clientId]/[anio]/[mes]/page.tsx` y `app/api/reportes/pdf/route.tsx`, los dos con `createServiceClient()` (sin sesión no hay RLS que aplicar, así que la firma ES el control de acceso — nunca selecciones un campo ahí que `app/metricas/page.tsx` no seleccione ya) |
 | Validadores del alta pública | `lib/validacion-registro.ts` — los usan el formulario **y** la Server Action; una sola definición |
 | Promoción a administrador de agencia | `crear_mi_agencia()` en `supabase/migrations/0011_alta_de_agencia.sql` — el único camino de `client` a `agency_admin` que no pasa por el service role |
