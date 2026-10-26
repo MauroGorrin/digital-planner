@@ -25,7 +25,7 @@
       "package-lock.json",
       "tsconfig.json"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T2",
@@ -53,7 +53,7 @@
       "package-lock.json",
       ".eslintrc.json"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T3",
@@ -89,7 +89,7 @@
       "tests/vitest.d.ts",
       ".gitignore"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T4",
@@ -113,7 +113,7 @@
     "files": [
       "tests/unit/webhooks/dispatch.test.ts"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E1-T5",
@@ -140,7 +140,7 @@
       "tests/unit/lib/date-utils.test.ts",
       "tests/unit/lib/tz.test.ts"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T1",
@@ -177,7 +177,7 @@
       "tests/integration/state-transitions.test.ts",
       ".gitignore"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T2",
@@ -201,7 +201,7 @@
     "files": [
       "tests/unit/lib/google-calendar-sync.test.ts"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T3",
@@ -237,7 +237,7 @@
     "files": [
       "README.md"
     ],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T4",
@@ -265,7 +265,7 @@
     ],
     "checkpoint": "step-09-agent-workspace",
     "files": [],
-    "status": "pending"
+    "status": "done"
   },
   {
     "id": "E2-T5",
@@ -302,6 +302,6 @@
     "files": [
       "README.md"
     ],
-    "status": "pending"
+    "status": "done"
   }
 ]

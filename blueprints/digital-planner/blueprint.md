@@ -7,6 +7,37 @@
 > Versión del blueprint: 1
 > Versiones verificadas por última vez: 2026-10-26 — ver §11 para la procedencia por paquete
 
+## Estado as-built (verificado el 2026-10-26)
+
+**Este bundle ya se ejecutó por completo** (los 10 pasos están en `done` en `tasks.json`) y el
+repositorio siguió evolucionando. Es el **registro histórico de un cambio** hecho sobre el commit
+`af06711`, no un plan ejecutable contra el repo de hoy: instalar Vitest, crear `.eslintrc.json` o el
+workflow de CI ya está hecho. Todas las cifras del cuerpo del documento (16 tablas, 7 estados, 7 valores
+de webhook, 7 variables de entorno, `next` 14.2.35…) describen ese baseline. Lo que cambió, medido en
+el repo el 2026-10-26:
+
+| Hecho | En este bundle (baseline `af06711`) | En el repo hoy |
+|---|---|---|
+| Commits posteriores al baseline | 0 | 120 |
+| Migraciones en `supabase/migrations/` | 2 (`0001_init`, `0002_storage`) | 16 (hasta `0016_restringir_acceso_por_asignacion`) |
+| Tablas | 16 | 20 (`agencies`, `client_assignments`, `ideas`, `idea_status_history`, `client_packages`… se sumaron) |
+| Enums | 6 | 8 (`idea_status` y `client_billing_mode` se sumaron) |
+| Valores de `content_status` | 7 | 8 (`pendiente_revision_interna`, tras `borrador`) |
+| Valores de `webhook_event_type` | 7 | 8 (`pieza_enviada_a_revision_interna`) |
+| Variables en `.env.example` | 7 | 10 (`NEXT_PUBLIC_CAPTCHA_PROVIDER`, `NEXT_PUBLIC_CAPTCHA_SITE_KEY`, `REPORT_LINK_SECRET`) |
+| `next` y `eslint-config-next` | 14.2.35 | 15.5.26 (siempre iguales entre sí) |
+| Archivos de prueba | 5 unitarios + 1 de integración | 48 unitarios + 14 de integración |
+| Scripts de `package.json` | los 10 de §9 | los mismos 10 |
+| `vitest` / `@vitest/coverage-v8` / `supabase` instalados | `^5.0.5` / `5.0.5` / `2.122.0` (pines refrescados el 2026-10-26) | `^5.0.1` / `5.0.1` / `2.117.0` |
+| `@testing-library/dom` | `^10.4.2` (peer de Testing Library, agregado en el refresh) | no está en el `package.json` de hoy |
+| Acciones de CI | `actions/checkout@v7`, `actions/setup-node@v7` | los mismos, fijadas por SHA (v7.0.1 y v7.0.0) |
+
+**Si alguien quisiera reutilizar este bundle sobre el repo actual,** tendría que: (1) subir
+`eslint-config-next` y su Verify del Paso 2 a la versión de `next` instalada (hoy 15.5.26); (2) recontar
+en el Paso 9 los 8 valores de `content_status` y 8 de `webhook_event_type` que debe documentar la skill;
+(3) añadir las 3 variables nuevas a la tabla de entorno; y (4) descartar los pasos cuyo resultado ya
+existe. Para eso hace falta un bundle nuevo (`/architect-brownfield`), no un parche a este.
+
 **Tipo de cambio:** brownfield, aditivo. Cierra brechas de higiene de ingeniería (pruebas, CI,
 tooling de agente, preparación de despliegue) sobre una aplicación Next.js + Supabase completamente
 funcional. **No se propone reescribir ni reestructurar código de aplicación que ya funciona.**
