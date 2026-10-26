@@ -25,7 +25,7 @@
       "package-lock.json",
       "tsconfig.json"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E1-T2",
@@ -53,7 +53,7 @@
       "package-lock.json",
       ".eslintrc.json"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E1-T3",
@@ -64,20 +64,21 @@
     ],
     "priority": "p0",
     "acceptance": [
-      "WHEN `npm run test` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed tests, 0 failed, 0 skipped.",
+      "WHEN `npx vitest run tests/unit/smoke.test.tsx` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed tests, 0 failed, 0 skipped, and `npm run test` SHALL exit 0.",
       "WHEN the second smoke assertion renders a component with `@testing-library/react`'s `render()` THE SYSTEM SHALL find it via `screen.getByText` and assert it with `@testing-library/jest-dom`'s `toBeInTheDocument()`, proving the full toolchain (Vitest, @vitejs/plugin-react, jsdom, Testing Library, jest-dom matchers) is wired together, not just jsdom alone.",
       "WHEN `npm run test:coverage` runs THE SYSTEM SHALL exit 0 and write `coverage/index.html`.",
-      "WHEN `package.json`'s `devDependencies` are inspected THE SYSTEM SHALL declare `vitest` matching `^5.0.1` and `@vitest/coverage-v8` at exactly `5.0.1`.",
+      "WHEN `package.json`'s `devDependencies` are inspected THE SYSTEM SHALL declare `vitest` matching `^5.0.5` and `@vitest/coverage-v8` at exactly `5.0.5`.",
       "WHEN `git check-ignore -q coverage` runs after `npm run test:coverage` has written the report THE SYSTEM SHALL exit 0, proving the generated coverage output is excluded from version control.",
       "WHEN `npm run typecheck` runs with a test file asserting `toBeInTheDocument()` THE SYSTEM SHALL exit 0, because `tests/vitest.d.ts` imports `@testing-library/jest-dom/vitest` and re-registers the matcher types that excluding `vitest.setup.ts` from tsconfig removed from the program."
     ],
     "verify": [
+      "npx vitest run tests/unit/smoke.test.tsx",
       "npm run test",
       "npm run test:coverage",
       "test -f coverage/index.html",
       "git check-ignore -q coverage",
-      "node -e \"const p=require('./package.json'); if(!/\\^5\\.0\\.1/.test(p.devDependencies.vitest)) process.exit(1)\"",
-      "node -e \"const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.1') process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(!/\\^5\\.0\\.5/.test(p.devDependencies.vitest)) process.exit(1)\"",
+      "node -e \"const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.5') process.exit(1)\"",
       "npm run typecheck"
     ],
     "checkpoint": "step-03-vitest-toolchain",
@@ -88,7 +89,7 @@
       "tests/vitest.d.ts",
       ".gitignore"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E1-T4",
@@ -112,7 +113,7 @@
     "files": [
       "tests/unit/webhooks/dispatch.test.ts"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E1-T5",
@@ -139,7 +140,7 @@
       "tests/unit/lib/date-utils.test.ts",
       "tests/unit/lib/tz.test.ts"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E2-T1",
@@ -162,7 +163,9 @@
       "npx supabase db reset",
       "node scripts/write-supabase-test-env.mjs",
       "npx vitest run tests/integration --environment node",
-      "node -e \"const p=require('./package.json'); if(p.devDependencies.supabase !== '2.117.0') process.exit(1)\"",
+      "npm run test:integration",
+      "npm run db:test:stop",
+      "node -e \"const p=require('./package.json'); if(p.devDependencies.supabase !== '2.122.0') process.exit(1)\"",
       "git check-ignore -q supabase/.temp",
       "git check-ignore -q supabase/.branches"
     ],
@@ -174,7 +177,7 @@
       "tests/integration/state-transitions.test.ts",
       ".gitignore"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E2-T2",
@@ -198,7 +201,7 @@
     "files": [
       "tests/unit/lib/google-calendar-sync.test.ts"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E2-T3",
@@ -216,7 +219,7 @@
       "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL declare triggers for both `push` and `pull_request`.",
       "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL pin `actions/checkout@v7` and `actions/setup-node@v7` with `node-version: '22'`.",
       "WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL run, in order, `npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run test:integration`, and `npm run build`.",
-      "WHEN every command from the previous criterion is run locally, in that order, on this machine THE SYSTEM SHALL exit 0 on each."
+      "WHEN the first four commands of the previous criterion (`npm run lint`, `npx tsc --noEmit`, `npm run test`, `npm run test:integration`) are run locally, in that order, on this machine THE SYSTEM SHALL exit 0 on each; `npm run build` is run and its output served in step 10."
     ],
     "verify": [
       "grep -q \"pull_request\" .github/workflows/ci.yml",
@@ -224,33 +227,31 @@
       "grep -q \"actions/checkout@v7\" .github/workflows/ci.yml",
       "grep -q \"actions/setup-node@v7\" .github/workflows/ci.yml",
       "grep -q \"node-version: '22'\" .github/workflows/ci.yml",
-      "grep -q \"npm run lint\" .github/workflows/ci.yml",
-      "grep -q \"tsc --noEmit\" .github/workflows/ci.yml",
-      "grep -q \"npm run test\" .github/workflows/ci.yml",
-      "grep -q \"npm run test:integration\" .github/workflows/ci.yml",
-      "grep -q \"npm run build\" .github/workflows/ci.yml",
+      "node -e \"const l=require('fs').readFileSync('.github/workflows/ci.yml','utf8').split(/\\r?\\n/).map(x=>x.trim());let p=-1;for(const x of ['run: npm run lint','run: npx tsc --noEmit','run: npm run test','run: npm run test:integration','run: npm run build']){const i=l.indexOf(x);if(i<=p)process.exit(1);p=i}\"",
       "npm run lint",
       "npx tsc --noEmit",
       "npm run test",
-      "npm run test:integration",
-      "npm run build"
+      "npm run test:integration"
     ],
     "checkpoint": "step-08-ci-pipeline",
     "files": [
       "README.md"
     ],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E2-T4",
     "title": "Verify the agent workspace (CLAUDE.md, AGENTS.md, .claude/) landed correctly",
     "epic": "02-integration-ci-deploy",
-    "dependencies": [],
+    "dependencies": [
+      "E2-T1"
+    ],
     "priority": "p2",
     "acceptance": [
       "WHEN `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json`, `.claude/skills/approval-flow-webhooks/SKILL.md`, and `.claude/rules/tests.md` are checked THE SYSTEM SHALL find all five present at the project root.",
       "WHEN `.claude/settings.json` is parsed THE SYSTEM SHALL parse as valid JSON.",
-      "WHEN `.claude/skills/approval-flow-webhooks/SKILL.md` is inspected THE SYSTEM SHALL mention all 7 `content_status` values (`borrador`, `pendiente_revision`, `cambios_solicitados`, `aprobado`, `programado`, `publicado`, `cancelado`) and all 7 `webhook_event_type` values (`pieza_creada_revision`, `pieza_aprobada`, `cambios_solicitados`, `comentario_agregado`, `fecha_cambiada`, `pieza_programada`, `pieza_publicada`)."
+      "WHEN `.claude/skills/approval-flow-webhooks/SKILL.md` is inspected THE SYSTEM SHALL mention all 7 `content_status` values (`borrador`, `pendiente_revision`, `cambios_solicitados`, `aprobado`, `programado`, `publicado`, `cancelado`) and all 7 `webhook_event_type` values (`pieza_creada_revision`, `pieza_aprobada`, `cambios_solicitados`, `comentario_agregado`, `fecha_cambiada`, `pieza_programada`, `pieza_publicada`).",
+      "WHEN `package.json` and `.claude/settings.json` are compared THE SYSTEM SHALL find a `Bash(npm run <script>:*)` allow entry (`Bash(npm start:*)` for `start`) for each of `dev`, `build`, `start`, `lint`, `typecheck`, `test`, `test:watch`, `test:coverage`, `test:integration` and `db:test:stop`, and each of those scripts SHALL exist."
     ],
     "verify": [
       "test -f CLAUDE.md",
@@ -259,11 +260,12 @@
       "test -f .claude/skills/approval-flow-webhooks/SKILL.md",
       "test -f .claude/rules/tests.md",
       "node -e \"JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))\"",
-      "for v in borrador pendiente_revision cambios_solicitados aprobado programado publicado cancelado pieza_creada_revision pieza_aprobada comentario_agregado fecha_cambiada pieza_programada pieza_publicada; do grep -q \"$v\" .claude/skills/approval-flow-webhooks/SKILL.md || exit 1; done"
+      "for v in borrador pendiente_revision cambios_solicitados aprobado programado publicado cancelado pieza_creada_revision pieza_aprobada comentario_agregado fecha_cambiada pieza_programada pieza_publicada; do grep -q \"$v\" .claude/skills/approval-flow-webhooks/SKILL.md || exit 1; done",
+      "node -e \"const s=require('./package.json').scripts,a=require('./.claude/settings.json').permissions.allow.join('|').split(String.fromCharCode(92)).join('');for(const k of ['dev','build','start','lint','typecheck','test','test:watch','test:coverage','test:integration','db:test:stop']){if(!s[k]||!a.includes(k==='start'?'Bash(npm start:':'Bash(npm run '+k+':*)')){console.error('falta: '+k);process.exit(1)}}\""
     ],
     "checkpoint": "step-09-agent-workspace",
     "files": [],
-    "status": "done"
+    "status": "pending"
   },
   {
     "id": "E2-T5",
@@ -275,18 +277,23 @@
     "priority": "p0",
     "acceptance": [
       "WHEN `npm run build` runs THE SYSTEM SHALL exit 0 and produce `.next/BUILD_ID`.",
-      "WHEN the built server is started with `npm start`, with `.env.local` populated from a running local Supabase instance via `scripts/write-supabase-test-env.mjs .env.local`, and queried at `/login` THE SYSTEM SHALL respond with HTTP 200.",
+      "WHEN the built server is started with `npm start`, with `.env.production.local` populated from a running local Supabase instance via `scripts/write-supabase-test-env.mjs .env.production.local`, and queried at `/login` THE SYSTEM SHALL respond with HTTP 200.",
       "WHEN README.md's \"Despliegue en Vercel\" section is inspected THE SYSTEM SHALL list all 7 variable names from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_APP_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`).",
       "WHEN README.md's \"Despliegue en Vercel\" section is inspected THE SYSTEM SHALL state that the Vercel project's Node.js Version setting must be `22.x`.",
-      "WHEN `package.json`'s `engines.node` is inspected THE SYSTEM SHALL still read `22.x`, unchanged since step 1."
+      "WHEN `package.json`'s `engines.node` is inspected THE SYSTEM SHALL still read `22.x`, unchanged since step 1.",
+      "WHEN the step finishes THE SYSTEM SHALL leave no `.env.production.local` in the working tree, so a later `next build` cannot silently pick up the local Supabase credentials."
     ],
     "verify": [
       "npx supabase start",
-      "node scripts/write-supabase-test-env.mjs .env.local",
+      "status=0; test -e .env.production.local || status=$?; test \"$status\" -eq 1",
+      "node scripts/write-supabase-test-env.mjs .env.production.local",
       "npm run build",
       "test -f .next/BUILD_ID",
-      "npm start & SERVER_PID=$!; sleep 3; CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login); kill $SERVER_PID; test \"$CODE\" = 200",
-      "npx supabase stop",
+      "status=0; curl -s -o /dev/null http://localhost:3000/ || status=$?; test \"$status\" -eq 7",
+      "npm start & SERVER_PID=$!; CODE=$(curl -s -o /dev/null -w '%{http_code}' --retry 15 --retry-delay 1 --retry-connrefused http://localhost:3000/login); kill $SERVER_PID; test \"$CODE\" = 200",
+      "npm run db:test:stop",
+      "node -e \"require('fs').rmSync('.env.production.local',{force:true})\"",
+      "test ! -e .env.production.local",
       "for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY NEXT_PUBLIC_APP_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REDIRECT_URI; do grep -q \"$v\" README.md || exit 1; done",
       "grep -q \"22.x\" README.md",
       "node -e \"const p=require('./package.json'); if(p.engines.node !== '22.x') process.exit(1)\""
@@ -295,6 +302,6 @@
     "files": [
       "README.md"
     ],
-    "status": "done"
+    "status": "pending"
   }
 ]

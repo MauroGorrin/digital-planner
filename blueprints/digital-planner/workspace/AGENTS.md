@@ -24,4 +24,4 @@ Google Calendar y webhooks a Make. Next.js 14 + Supabase (Postgres/Auth/Storage/
 4. Nunca mockees Postgres en `tests/integration/**`.
 5. Nunca marques una tarea terminada con el gate en rojo.
 
-Arquitectura completa, límites entre capas y tokens de diseño: ver `CLAUDE.md` en este directorio.
+Arquitectura completa y límites entre capas: ver `CLAUDE.md` en este directorio.

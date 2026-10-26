@@ -5,7 +5,7 @@
 > Track de runtime: ts-node (existente, npm) · `knowledge/runtime-tracks/ts-node.md`
 > Modo de emisión: bundle
 > Versión del blueprint: 1
-> Versiones verificadas por última vez: 2026-09-24 — ver §11 para la procedencia por paquete
+> Versiones verificadas por última vez: 2026-10-26 — ver §11 para la procedencia por paquete
 
 **Tipo de cambio:** brownfield, aditivo. Cierra brechas de higiene de ingeniería (pruebas, CI,
 tooling de agente, preparación de despliegue) sobre una aplicación Next.js + Supabase completamente
@@ -238,7 +238,7 @@ digital-planner/
 
 ### Target state (Delta)
 
-Todo lo de arriba, **sin cambios de contenido salvo los 4 archivos editados que se listan abajo**,
+Todo lo de arriba, **sin cambios de contenido salvo los 5 archivos editados que se listan abajo**,
 más los archivos nuevos que agrega este blueprint:
 
 ```
@@ -251,6 +251,7 @@ digital-planner/
   tests/
     unit/
       smoke.test.tsx              # NUEVO — Paso 3
+    vitest.d.ts                   # NUEVO — Paso 3 — tests/vitest.d.ts: tipos de jest-dom para tsc
       webhooks/dispatch.test.ts   # NUEVO — Paso 4
       lib/
         date-utils.test.ts        # NUEVO — Paso 5
@@ -271,6 +272,7 @@ digital-planner/
   package.json                 # EDITADO — Pasos 1, 2, 3, 6: scripts + devDependencies
   package-lock.json            # EDITADO — regenerado por cada npm install
   tsconfig.json                # EDITADO — Paso 1: exclude += "blueprints"
+  .gitignore                   # EDITADO — Pasos 3 y 6: /coverage, supabase/.temp/, supabase/.branches/
   README.md                    # EDITADO — Pasos 8, 10: secciones CI y Despliegue en Vercel
   blueprints/digital-planner/  # este bundle — nunca escaneado por lint/typecheck/test (ver §19.6)
 ```
@@ -287,9 +289,9 @@ digital-planner/
 
 Este blueprint no declara ninguna convención de import/resolución nueva (alias de path, condición
 de export, forma de especificador) — el proyecto ya usa `"paths": { "@/*": ["./*"] }` en
-`tsconfig.json` sin cambios, y `vitest.config.ts` espeja ese mismo alias (§19.6). Por eso §19.6
-marca la matriz de convención de resolución como `NOT APPLICABLE` — no hay una convención nueva que
-reconciliar entre contextos.
+`tsconfig.json` sin cambios, y `vitest.config.ts` espeja ese mismo alias (§19.6). Aun así el alias
+existe y los Pasos 4 y 7 lo usan en `vi.mock('@/lib/supabase/server')`, así que §19.6 llena la matriz
+de convención de resolución, una fila por contexto que carga módulos del proyecto.
 
 Cada archivo nuevo listado arriba tiene exactamente uno de dos orígenes, nombrado explícitamente:
 un paso de §9 lo autora (listado en el **Do** de ese paso), o está emitido en `workspace/` (§19.6)
@@ -305,8 +307,8 @@ y `.claude/rules/tests.md` son todos del segundo tipo — ningún paso de §9 lo
 ### Delta
 
 **NOT APPLICABLE — este blueprint no agrega, modifica ni elimina ninguna tabla, columna, enum,
-índice o función.** Las 16 tablas, los 4 enums (`user_role`, `platform_type`, `content_format`,
-`content_status`, `approval_decision`, `webhook_event_type` — 6 en total, ver nota abajo) y las 7
+índice o función.** Las 16 tablas, los 6 enums (`user_role`, `platform_type`, `content_format`,
+`content_status`, `approval_decision`, `webhook_event_type`) y las 7
 funciones `SECURITY DEFINER` existentes se usan tal cual están, verificadas leyendo
 `supabase/migrations/0001_init.sql` y `0002_storage.sql` directamente. El Paso 6 (§9) escribe filas
 reales a través de este esquema existente dentro de una prueba de integración y las borra en
@@ -432,7 +434,9 @@ Delta: `NOT APPLICABLE — sin cambios de auth (ver §1, No-objetivos).`
 Esta es la sección por la que existe todo el blueprint. 10 pasos, agrupados en 2 epics de 5 pasos
 cada uno (`ceil(10÷9)=2`, `floor(10÷5)=2` — exactamente 2 es el único número legal para 10 pasos).
 
-**§9.1 Paridad y cutover:** `NOT APPLICABLE — cambio aditivo (suite de pruebas, CI, tooling de
+### 9.1 Paridad y cutover
+
+`NOT APPLICABLE — cambio aditivo (suite de pruebas, CI, tooling de
 agente, preparación de despliegue). Ningún componente en ejecución, dependencia ni interfaz está
 siendo reemplazado — §1 (No-objetivos) y §5 (Interfaces held constant) congelan toda la superficie
 de la aplicación. No hay nada que cortar sobre (cutover).`
@@ -443,19 +447,20 @@ de la aplicación. No hay nada que cortar sobre (cutover).`
 |---|---|---|---|---|
 | 1 | Node 22 + script de typecheck | — | `package.json`, `package-lock.json`, `tsconfig.json` | `npm run typecheck` |
 | 2 | Config de ESLint (arregla `next lint`) | 1 | `package.json`, `package-lock.json`, `.eslintrc.json` | `npm run lint` |
-| 3 | Toolchain Vitest + jsdom + Testing Library | 2 | `package.json`, `package-lock.json`, `tests/unit/smoke.test.tsx` | `npm run test` |
+| 3 | Toolchain Vitest + jsdom + Testing Library | 2 | `package.json`, `package-lock.json`, `tests/unit/smoke.test.tsx`, `tests/vitest.d.ts`, `.gitignore` | `npm run test` |
 | 4 | Pruebas unitarias — firma HMAC de webhooks | 3 | `tests/unit/webhooks/dispatch.test.ts` | `npx vitest run tests/unit/webhooks/dispatch.test.ts` |
 | 5 | Pruebas unitarias — fecha/hora con zona horaria | 3 | `tests/unit/lib/date-utils.test.ts`, `tests/unit/lib/tz.test.ts` | `npx vitest run tests/unit/lib/*.test.ts` |
-| 6 | Integración — Supabase local + transiciones de estado (**gate de capa de datos**) | 3 | `package.json`, `package-lock.json`, `scripts/write-supabase-test-env.mjs`, `tests/integration/state-transitions.test.ts` | `npm run test:integration` |
+| 6 | Integración — Supabase local + transiciones de estado (**gate de capa de datos**) | 3 | `package.json`, `package-lock.json`, `scripts/write-supabase-test-env.mjs`, `tests/integration/state-transitions.test.ts`, `.gitignore` | `npm run test:integration` |
 | 7 | Pruebas unitarias — sync de Google Calendar | 3 | `tests/unit/lib/google-calendar-sync.test.ts` | `npx vitest run tests/unit/lib/google-calendar-sync.test.ts` |
-| 8 | Verificar el pipeline de CI localmente | 2, 4, 5, 6, 7 | `README.md` | `npm run lint && npx tsc --noEmit && npm run test && npm run test:integration && npm run build` |
-| 9 | Verificar el workspace de agente | — | ninguno (valida lo emitido por Bootstrap) | ver Verify del paso |
+| 8 | Verificar el pipeline de CI localmente | 2, 4, 5, 6, 7 | `README.md` | `npm run lint && npx tsc --noEmit && npm run test && npm run test:integration` |
+| 9 | Verificar el workspace de agente | 6 | ninguno (valida lo emitido por Bootstrap contra el árbol que dejaron los Pasos 1–8) | ver Verify del paso |
 | 10 | Build de producción + preparación de Vercel | 8 | `README.md` | `npm run build` + smoke a `/login` |
 
 *(Ordenamiento: fundación de tooling → pruebas unitarias en paralelo → gate de capa de datos →
 verificación de CI → verificación de workspace de agente → build de producción. Los Pasos 4, 5, 6 y
-7 dependen únicamente del Paso 3 y no comparten archivos entre sí — pueden ejecutarse en paralelo,
-ver `tasks.json`.)*
+7 dependen únicamente del Paso 3 y no comparten archivos entre sí — pueden ejecutarse en cualquier orden, pero
+de uno en uno: cada Checkpoint hace `git add -A` sobre el mismo árbol, y en paralelo mezclaría
+commits y tags — en paralelo solo con un worktree por paso; ver `tasks.json`.)*
 
 ---
 
@@ -486,15 +491,11 @@ vivo (2026-09-24):
   devDependencies de pruebas.
 
 **Done when**
-- [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare `"@types/node"` matching `^22`
-      under `devDependencies`.
+- [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare `"@types/node"` matching `^22` under `devDependencies`.
 - [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare `"engines": { "node": "22.x" }`.
-- [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare a `"typecheck"` script equal to
-      `"tsc --noEmit"`.
-- [ ] WHEN `tsconfig.json`'s `exclude` array is inspected THE SYSTEM SHALL contain `"blueprints"`,
-      `"vitest.config.ts"` and `"vitest.setup.ts"`.
-- [ ] WHEN `npm run typecheck` runs THE SYSTEM SHALL exit 0 against the existing, untouched
-      application code.
+- [ ] WHEN `package.json` is inspected THE SYSTEM SHALL declare a `"typecheck"` script equal to `"tsc --noEmit"`.
+- [ ] WHEN `tsconfig.json`'s `exclude` array is inspected THE SYSTEM SHALL contain `"blueprints"`, `"vitest.config.ts"` and `"vitest.setup.ts"` — the latter two because Bootstrap places them at the project root before this step while the packages they import are not installed until E1-T3.
+- [ ] WHEN `npm run typecheck` runs THE SYSTEM SHALL exit 0 against the existing, untouched application code.
 
 **Verify**
 ```bash
@@ -527,8 +528,9 @@ git tag step-01-node22-target
 
 **Do**
 
-Instala `eslint@^8.57.0` y `eslint-config-next@14.2.35` como devDependencies (ambos pines
-`UNVERIFIED` este sesión — ver §11). Crea `.eslintrc.json` en la raíz:
+Ejecuta `npm install -D eslint@^8.57.0` y `npm install -D -E eslint-config-next@14.2.35` (`-E`
+obligatorio: sin él npm guarda `^14.2.35` y el Verify exige el valor exacto) como devDependencies (ambos pines
+verificados contra el registro el 2026-10-26 — ver §11). Crea `.eslintrc.json` en la raíz:
 `{"extends": "next/core-web-vitals", "ignorePatterns": ["blueprints/**", ".next/**",
 "node_modules/**"]}`. Corre `npm run lint`. `next/core-web-vitals` solo falla el comando en
 hallazgos de nivel `error` (los `warn` no lo hacen). Si aparece algún `error` en código existente
@@ -573,8 +575,9 @@ git tag step-02-eslint-config
 
 **Do**
 
-Instala `vitest@^5.0.1 @vitejs/plugin-react@^6.1.1 vite@^8.3.1 @testing-library/react@^16.3.3
-@testing-library/jest-dom@^7.0.1 jsdom@^30.1.1 @vitest/coverage-v8@5.0.1`. Agrega los scripts
+Instala con `npm install -D vitest@^5.0.5 @vitejs/plugin-react@^6.1.2 vite@^8.3.5 @testing-library/react@^16.3.3
+@testing-library/jest-dom@^7.0.1 @testing-library/dom@^10.4.2 jsdom@^30.1.3`, y aparte `npm install -D -E @vitest/coverage-v8@5.0.5` (`-E` obligatorio: el Verify exige
+el pin exacto). Agrega los scripts
 `"test": "vitest run tests/unit"`, `"test:watch": "vitest tests/unit"`,
 `"test:coverage": "vitest run tests/unit --coverage"`. `vitest.config.ts` y `vitest.setup.ts` ya
 existen en la raíz del proyecto (copiados por Bootstrap desde `workspace/` de este bundle — §19.6)
@@ -584,8 +587,8 @@ aritmética trivial, y una segunda que renderiza un elemento mínimo con `render
 de `@testing-library/jest-dom` — esto prueba que todo el toolchain está conectado, no solo
 instalado.
 
-Agrega `/coverage` a `.gitignore` (bajo el bloque `# production`). Es la única edición a
-`.gitignore` de todo este blueprint (§10): `test:coverage` escribe un reporte HTML completo ahí,
+Agrega `/coverage` a `.gitignore` (bajo el bloque `# production`). Es la primera de las dos
+ediciones a `.gitignore` de este blueprint (la otra es del Paso 6, §10): `test:coverage` escribe un reporte HTML completo ahí,
 ningún patrón existente lo atrapa, y el `git add -A` del Checkpoint de abajo lo commitearía entero.
 
 Crea `tests/vitest.d.ts` con una sola línea, `import '@testing-library/jest-dom/vitest';`. Es la
@@ -596,24 +599,20 @@ la usa. Este archivo la devuelve sin volver a meter la config de Vitest al typec
 gate de aceptación de este epic, ejecutado en vivo (2026-09-24).
 
 **Done when**
-- [ ] WHEN `npm run test` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed
-      tests, 0 failed, 0 skipped.
-- [ ] WHEN `git check-ignore -q coverage` runs after `npm run test:coverage` has written the
-      report THE SYSTEM SHALL exit 0, proving the generated coverage output is excluded from
-      version control.
-- [ ] WHEN the second smoke assertion renders a component with `@testing-library/react`'s
-      `render()` THE SYSTEM SHALL find it via `screen.getByText` and assert it with
-      `@testing-library/jest-dom`'s `toBeInTheDocument()`, proving the full toolchain (Vitest,
-      `@vitejs/plugin-react`, jsdom, Testing Library, jest-dom matchers) is wired together, not
-      just jsdom alone.
+- [ ] WHEN `npx vitest run tests/unit/smoke.test.tsx` runs THE SYSTEM SHALL report exactly 1 passed test file and 2 passed tests, 0 failed, 0 skipped, and `npm run test` SHALL exit 0.
+- [ ] WHEN the second smoke assertion renders a component with `@testing-library/react`'s `render()` THE SYSTEM SHALL find it via `screen.getByText` and assert it with `@testing-library/jest-dom`'s `toBeInTheDocument()`, proving the full toolchain (Vitest, @vitejs/plugin-react, jsdom, Testing Library, jest-dom matchers) is wired together, not just jsdom alone.
 - [ ] WHEN `npm run test:coverage` runs THE SYSTEM SHALL exit 0 and write `coverage/index.html`.
-- [ ] WHEN `package.json`'s `devDependencies` are inspected THE SYSTEM SHALL declare `vitest`
-      matching `^5.0.1` and `@vitest/coverage-v8` at exactly `5.0.1`.
+- [ ] WHEN `package.json`'s `devDependencies` are inspected THE SYSTEM SHALL declare `vitest` matching `^5.0.5` and `@vitest/coverage-v8` at exactly `5.0.5`.
+- [ ] WHEN `git check-ignore -q coverage` runs after `npm run test:coverage` has written the report THE SYSTEM SHALL exit 0, proving the generated coverage output is excluded from version control.
+- [ ] WHEN `npm run typecheck` runs with a test file asserting `toBeInTheDocument()` THE SYSTEM SHALL exit 0, because `tests/vitest.d.ts` imports `@testing-library/jest-dom/vitest` and re-registers the matcher types that excluding `vitest.setup.ts` from tsconfig removed from the program.
 
 **Verify**
 ```bash
-npm run test
+npx vitest run tests/unit/smoke.test.tsx
 # expect: "Test Files  1 passed (1)", "Tests  2 passed (2)", 0 failed, 0 skipped
+
+npm run test
+# expect: exit 0 — desde el Paso 4 reporta más archivos; el conteo se asserta solo sobre el smoke test
 
 npm run test:coverage
 # expect: exit 0
@@ -623,9 +622,12 @@ test -f coverage/index.html
 git check-ignore -q coverage
 # expect: exit 0 — the generated report is gitignored, not committed
 
-node -e "const p=require('./package.json'); if(!/\^5\.0\.1/.test(p.devDependencies.vitest)) process.exit(1)"
+node -e "const p=require('./package.json'); if(!/\^5\.0\.5/.test(p.devDependencies.vitest)) process.exit(1)"
 # expect: exit 0
-node -e "const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.1') process.exit(1)"
+node -e "const p=require('./package.json'); if(p.devDependencies['@vitest/coverage-v8'] !== '5.0.5') process.exit(1)"
+# expect: exit 0
+
+npm run typecheck
 # expect: exit 0
 ```
 
@@ -733,15 +735,20 @@ git tag step-05-date-tz-tests
 
 **Do**
 
-Instala `supabase@2.117.0` como devDependency. Agrega los scripts
+Instala con `npm install -D -E supabase@2.122.0` (`-E` obligatorio: el Verify exige el pin exacto) como devDependency. Agrega los scripts
 `"test:integration": "npx supabase start && npx supabase db reset && node scripts/write-supabase-test-env.mjs && vitest run tests/integration --environment node"`
 y `"db:test:stop": "npx supabase stop"`.
+
+Antes de correr `npx supabase start`, agrega `supabase/.temp/` y `supabase/.branches/` a `.gitignore`,
+junto a la línea `/coverage` del Paso 3. `supabase start` escribe ahí `start-secrets/**/docker.env`
+con las llaves de la instancia local, y el `git add -A` del Checkpoint lo commitearía; una vez
+trackeado, `.gitignore` ya no lo cubre. Es la segunda y última edición a `.gitignore` (§10).
 
 Escribe `scripts/write-supabase-test-env.mjs`: corre `npx supabase status -o json`, lo parsea, y
 escribe `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` y
 `NEXT_PUBLIC_APP_URL=http://localhost:3000` en la ruta que reciba como **primer argumento de línea
 de comandos** (`process.argv[2]`), con `.env.test.local` como valor por defecto si no se pasa
-ninguno. Este parámetro existe porque el Paso 10 reutiliza el mismo script pasándole `.env.local`
+ninguno. Este parámetro existe porque el Paso 10 reutiliza el mismo script pasándole `.env.production.local`
 en vez de aceptar una segunda copia del mismo lector de `supabase status`. Si los nombres de campo
 del JSON de tu versión instalada del CLI difieren de `API_URL` / `ANON_KEY` / `SERVICE_ROLE_KEY`,
 corre `npx supabase status -o json` una vez a mano y ajusta los nombres de propiedad en el
@@ -749,22 +756,25 @@ script — nunca caigas de vuelta a una credencial hardcodeada.
 
 Escribe `tests/integration/state-transitions.test.ts` usando `@supabase/supabase-js` (ya es
 dependencia de runtime — no se necesita un paquete nuevo para el cliente):
-1. Un cliente con service role crea dos usuarios de prueba vía
+1. Un cliente con service role crea tres usuarios de prueba vía
    `auth.admin.createUser({ email, password, email_confirm: true })` — uno para el admin de
-   agencia, uno para el contacto de cliente. `handle_new_user()` crea sus `profiles`
+   agencia, uno para el contacto del cliente A y uno para el contacto del cliente B. `handle_new_user()` crea sus `profiles`
    automáticamente; actualiza el `role` del admin a `'agency_admin'` con el mismo cliente de
    service role.
-2. El cliente de service role inserta una fila en `clients`, una en `client_contacts` (ligando el
-   usuario contacto a ese cliente), y una en `content_pieces` (`status` por defecto `'borrador'`).
+2. El cliente de service role inserta dos filas en `clients` (A y B), una en `client_contacts` por
+   cada cliente (ligando cada usuario contacto a su cliente), y una en `content_pieces` del cliente A (`status` por defecto `'borrador'`).
 3. Inicia sesión como el admin con un cliente de clave anónima
    (`auth.signInWithPassword`) y llama `.rpc('submit_for_review', { p_content_piece_id })`.
 4. Inicia sesión como el contacto de cliente y llama
    `.rpc('approve_content_piece', { p_content_piece_id, p_note: 'Se ve bien' })`.
-5. Como caso negativo, inicia sesión como un tercer usuario de prueba que es contacto de un
-   cliente **distinto** y llama `approve_content_piece` sobre la misma pieza — espera un error.
-6. En `afterAll`, borra la fila de `clients` (cascada a `content_pieces`, `client_contacts`,
+5. Como caso negativo, inicia sesión como el contacto del cliente B (un
+   cliente **distinto**) y llama `approve_content_piece` sobre la misma pieza — espera un error.
+6. En `afterAll`, borra las dos filas de `clients` (cascada a `content_pieces`, `client_contacts`,
    `status_history`, `approvals`) y borra los tres usuarios de prueba vía
    `auth.admin.deleteUser`.
+
+El archivo contiene exactamente tres `it()` — los pasos 3, 4 y 5 (submit, approve y rechazo
+cruzado); los pasos 1, 2 y 6 viven en `beforeAll`/`afterAll`.
 
 **Done when**
 - [ ] WHEN `npm run test:integration` runs against a freshly reset local Supabase THE SYSTEM SHALL
@@ -785,6 +795,9 @@ dependencia de runtime — no se necesita un paquete nuevo para el cliente):
 - [ ] WHEN the test suite finishes THE SYSTEM SHALL delete every row and test user it created, in
       an `afterAll`, so `npm run test:integration` is safe to re-run against the same local
       instance.
+- [ ] WHEN `supabase start` has run THE SYSTEM SHALL leave `supabase/.temp/` and
+      `supabase/.branches/` untracked — `git check-ignore -q supabase/.temp` exits 0 — because
+      `supabase start` writes `start-secrets/**/docker.env` with the local instance keys there.
 
 **Verify**
 ```bash
@@ -798,9 +811,20 @@ node scripts/write-supabase-test-env.mjs
 # expect: exit 0, writes .env.test.local
 
 npx vitest run tests/integration --environment node
-# expect: 5 passed, 0 failed, 0 skipped — this is the data-layer gate
+# expect: 3 passed, 0 failed, 0 skipped — the 3 it() blocks above; this is the data-layer gate
 
-node -e "const p=require('./package.json'); if(p.devDependencies.supabase !== '2.117.0') process.exit(1)"
+npm run test:integration
+# expect: exit 0 — el script que usan CI, el Paso 8 y §20.1, ejecutado por primera vez aquí
+
+npm run db:test:stop
+# expect: exit 0 — el script de limpieza también se ejecuta aquí
+
+node -e "const p=require('./package.json'); if(p.devDependencies.supabase !== '2.122.0') process.exit(1)"
+# expect: exit 0
+
+git check-ignore -q supabase/.temp
+# expect: exit 0
+git check-ignore -q supabase/.branches
 # expect: exit 0
 ```
 
@@ -863,8 +887,9 @@ git tag step-07-google-calendar-sync-tests
 `.github/workflows/ci.yml` ya existe en la raíz del proyecto (copiado por Bootstrap — §19.6). Este
 paso no lo crea. Agrega una sección `## CI` a `README.md` documentando el disparador (push + pull
 request) y el nombre del check requerido (`CI / test` en la UI de branch protection de GitHub).
-Luego corre, en local, cada comando que el workflow corre, en el mismo orden, para probar que
-pasará antes de que el primer push lo ejercite.
+Luego corre, en local, los cuatro primeros comandos que el workflow corre, en el mismo orden, para
+probar que pasarán antes de que el primer push los ejercite; el quinto, `npm run build`, se corre y
+se sirve en el Paso 10.
 
 **Done when**
 - [ ] WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL declare triggers for both
@@ -873,8 +898,9 @@ pasará antes de que el primer push lo ejercite.
       `actions/setup-node@v7` with `node-version: '22'`.
 - [ ] WHEN `.github/workflows/ci.yml` is inspected THE SYSTEM SHALL run, in order, `npm run lint`,
       `npx tsc --noEmit`, `npm run test`, `npm run test:integration`, and `npm run build`.
-- [ ] WHEN every command from the previous criterion is run locally, in that order, on this
-      machine THE SYSTEM SHALL exit 0 on each.
+- [ ] WHEN the first four commands of the previous criterion (`npm run lint`, `npx tsc --noEmit`,
+      `npm run test`, `npm run test:integration`) are run locally, in that order, on this machine
+      THE SYSTEM SHALL exit 0 on each; `npm run build` is run and its output served in step 10.
 
 **Verify**
 ```bash
@@ -888,11 +914,11 @@ grep -q "actions/setup-node@v7" .github/workflows/ci.yml
 # expect: exit 0
 grep -q "node-version: '22'" .github/workflows/ci.yml
 # expect: exit 0
-grep -q "npm run lint" .github/workflows/ci.yml && grep -q "tsc --noEmit" .github/workflows/ci.yml && grep -q "npm run test" .github/workflows/ci.yml && grep -q "npm run test:integration" .github/workflows/ci.yml && grep -q "npm run build" .github/workflows/ci.yml
-# expect: exit 0 — all five commands present
+node -e "const l=require('fs').readFileSync('.github/workflows/ci.yml','utf8').split(/\r?\n/).map(x=>x.trim());let p=-1;for(const x of ['run: npm run lint','run: npx tsc --noEmit','run: npm run test','run: npm run test:integration','run: npm run build']){const i=l.indexOf(x);if(i<=p)process.exit(1);p=i}"
+# expect: exit 0 — los cinco comandos están, cada uno en su línea y en este orden
 
-npm run lint && npx tsc --noEmit && npm run test && npm run test:integration && npm run build
-# expect: exit 0 — the exact sequence CI runs, mirrored locally
+npm run lint && npx tsc --noEmit && npm run test && npm run test:integration
+# expect: exit 0 — the CI sequence minus the build, which step 10 runs and serves
 ```
 
 **Checkpoint**
@@ -915,6 +941,11 @@ cinco están presentes, que `settings.json` es JSON válido, y que la skill docu
 valores literales de `content_status` y `webhook_event_type` (contados directamente de
 `types/database.ts`, no adivinados).
 
+Además verifica que el allowlist siga cubriendo el árbol que dejaron los Pasos 1–8: cada script que
+esos pasos agregaron a `package.json` (`typecheck`, `test*`, `db:test:stop`) tiene su entrada
+`Bash(npm run <script>:*)` en `.claude/settings.json`. Esta comprobación no puede cumplirse antes de
+que existan los scripts de los Pasos 1, 3 y 6, y eso es lo que hace de este paso una compuerta.
+
 **Done when**
 - [ ] WHEN `CLAUDE.md`, `AGENTS.md`, `.claude/settings.json`,
       `.claude/skills/approval-flow-webhooks/SKILL.md`, and `.claude/rules/tests.md` are checked
@@ -925,6 +956,10 @@ valores literales de `content_status` y `webhook_event_type` (contados directame
       `aprobado`, `programado`, `publicado`, `cancelado`) and all 7 `webhook_event_type` values
       (`pieza_creada_revision`, `pieza_aprobada`, `cambios_solicitados`, `comentario_agregado`,
       `fecha_cambiada`, `pieza_programada`, `pieza_publicada`).
+- [ ] WHEN `package.json` and `.claude/settings.json` are compared THE SYSTEM SHALL find a
+      `Bash(npm run <script>:*)` allow entry (`Bash(npm start:*)` for `start`) for each of `dev`,
+      `build`, `start`, `lint`, `typecheck`, `test`, `test:watch`, `test:coverage`,
+      `test:integration` and `db:test:stop`, and each of those scripts SHALL exist.
 
 **Verify**
 ```bash
@@ -936,6 +971,9 @@ node -e "JSON.parse(require('fs').readFileSync('.claude/settings.json','utf8'))"
 
 for v in borrador pendiente_revision cambios_solicitados aprobado programado publicado cancelado pieza_creada_revision pieza_aprobada comentario_agregado fecha_cambiada pieza_programada pieza_publicada; do grep -q "$v" .claude/skills/approval-flow-webhooks/SKILL.md || exit 1; done
 # expect: exit 0 — all 13 distinct literal names documented (cambios_solicitados is shared by both enums)
+
+node -e "const s=require('./package.json').scripts,a=require('./.claude/settings.json').permissions.allow.join('|').split(String.fromCharCode(92)).join('');for(const k of ['dev','build','start','lint','typecheck','test','test:watch','test:coverage','test:integration','db:test:stop']){if(!s[k]||!a.includes(k==='start'?'Bash(npm start:':'Bash(npm run '+k+':*)')){console.error('falta: '+k);process.exit(1)}}"
+# expect: exit 0 — los 10 scripts existen y cada uno tiene su entrada en el allowlist
 ```
 
 **Checkpoint**
@@ -960,27 +998,30 @@ responde 500, no 200, y el chequeo de abajo fallaría en un checkout limpio que 
 
 1. `npx supabase start` — no-op seguro si ya estaba arriba desde una corrida anterior de
    `npm run test:integration` en esta misma sesión; si no, la levanta.
-2. `node scripts/write-supabase-test-env.mjs .env.local` — el mismo script del Paso 6, que ya
+2. `node scripts/write-supabase-test-env.mjs .env.production.local` — el mismo script del Paso 6, que ya
    acepta una ruta de destino opcional como primer argumento (por defecto `.env.test.local`; aquí
-   se le pasa `.env.local` explícitamente). Escribe las credenciales de la Supabase **local** en
-   `.env.local`, que Next.js carga automáticamente en `npm run build`/`npm start` (soporte nativo
+   se le pasa `.env.production.local` explícitamente). Escribe las credenciales de la Supabase **local** en
+   `.env.production.local` (y no en `.env.local`: ese es el de desarrollo del builder, apunta a la
+   Supabase de desarrollo y lleva las claves `GOOGLE_*`, y ningún checkpoint lo restauraría), que
+   Next.js carga automáticamente, con prioridad sobre `.env.local`, en `npm run build`/`npm start` (soporte nativo
    de Next.js — mecanismo distinto del cargador casero de `vitest.setup.ts`, que solo aplica a
-   Vitest). `.env.local` ya está excluido por el patrón `.env.local`/`.env*.local` existente en
-   `.gitignore` — nunca se commitea, ver §10.
+   Vitest). `.env.production.local` ya está excluido por el patrón `.env*.local` existente en
+   `.gitignore` — nunca se commitea, ver §10. Si ya existe un `.env.production.local`, detente: este
+   paso lo sobreescribiría y lo borraría al final, sin respaldo posible.
 3. `npm run build` y confirma exit 0.
 4. Arranca el servidor construido con `npm start`, pide `/login` (la única ruta que no requiere
    sesión), y confirma que responde 200 — ahora sirviendo contra la Supabase local real, nunca
    contra una URL de producción inventada.
-5. `npx supabase stop` — deja el entorno limpio al terminar.
+5. `npm run db:test:stop` y borra `.env.production.local` — deja el entorno limpio al terminar.
 6. Agrega una sección "## Despliegue en Vercel" a `README.md` listando cada nombre de variable de
-   `.env.example` (7 variables, **de producción** — `.env.local` de este paso es solo para el
+   `.env.example` (7 variables, **de producción** — `.env.production.local` de este paso es solo para el
    smoke-check local, nunca para el despliegue real) y declarando que el ajuste de versión de
    Node.js del proyecto en Vercel debe ser `22.x`.
 
 **Done when**
 - [ ] WHEN `npm run build` runs THE SYSTEM SHALL exit 0 and produce `.next/BUILD_ID`.
-- [ ] WHEN the built server is started with `npm start`, with `.env.local` populated from a
-      running local Supabase instance via `scripts/write-supabase-test-env.mjs .env.local`, and
+- [ ] WHEN the built server is started with `npm start`, with `.env.production.local` populated from a
+      running local Supabase instance via `scripts/write-supabase-test-env.mjs .env.production.local`, and
       queried at `/login` THE SYSTEM SHALL respond with HTTP 200.
 - [ ] WHEN README.md's "Despliegue en Vercel" section is inspected THE SYSTEM SHALL list all 7
       variable names from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`,
@@ -990,25 +1031,37 @@ responde 500, no 200, y el chequeo de abajo fallaría en un checkout limpio que 
       Vercel project's Node.js Version setting must be `22.x`.
 - [ ] WHEN `package.json`'s `engines.node` is inspected THE SYSTEM SHALL still read `22.x`,
       unchanged since step 1.
+- [ ] WHEN the step finishes THE SYSTEM SHALL leave no `.env.production.local` in the working tree,
+      so a later `next build` cannot silently pick up the local Supabase credentials.
 
 **Verify**
 ```bash
 npx supabase start
 # expect: exit 0 — no-op if already running
 
-node scripts/write-supabase-test-env.mjs .env.local
-# expect: exit 0, writes .env.local with local Supabase credentials
+status=0; test -e .env.production.local || status=$?; test "$status" -eq 1
+# expect: exit 0 — aborta si ya existe un .env.production.local del builder: este paso lo sobreescribe y lo borra sin respaldo
+
+node scripts/write-supabase-test-env.mjs .env.production.local
+# expect: exit 0, writes .env.production.local with local Supabase credentials
 
 npm run build
 # expect: exit 0
 test -f .next/BUILD_ID
 # expect: exit 0
 
-npm start & SERVER_PID=$!; sleep 3; CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login); kill $SERVER_PID; test "$CODE" = 200
+status=0; curl -s -o /dev/null http://localhost:3000/ || status=$?; test "$status" -eq 7
+# expect: exit 0 — el puerto 3000 está libre (curl sale 7); si no, el smoke podría contestar un servidor viejo
+
+npm start & SERVER_PID=$!; CODE=$(curl -s -o /dev/null -w '%{http_code}' --retry 15 --retry-delay 1 --retry-connrefused http://localhost:3000/login); kill $SERVER_PID; test "$CODE" = 200
 # expect: exit 0 — the built server actually serves the public /login route, against local Supabase
 
-npx supabase stop
+npm run db:test:stop
 # expect: exit 0
+
+node -e "require('fs').rmSync('.env.production.local',{force:true})"
+test ! -e .env.production.local
+# expect: exit 0 — el env efímero ya no existe
 
 for v in NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY NEXT_PUBLIC_APP_URL GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GOOGLE_REDIRECT_URI; do grep -q "$v" README.md || exit 1; done
 # expect: exit 0
@@ -1082,8 +1135,8 @@ validación de entorno (regla 9 de §9).
 `.env`, `.env.local`, `.env*.local`, `.DS_Store`, `*.pem`, `npm-debug.log*`, `*.tsbuildinfo`,
 `next-env.d.ts`): ninguno de los archivos de esta tabla coincide con ninguno de esos patrones.
 `.env.test.local` (generado por el Paso 6, nunca commiteado) SÍ coincide con `.env*.local` —
-correctamente, porque es justo el archivo que debe quedar fuera. Lo mismo para `.env.local`
-(generado por el Paso 10), que coincide con dos patrones existentes.
+correctamente, porque es justo el archivo que debe quedar fuera. Lo mismo para `.env.production.local`
+(generado y borrado por el Paso 10), que coincide con `.env*.local`.
 
 **Este blueprint necesita tres líneas nuevas en `.gitignore`, repartidas entre dos pasos.** Ambas
 ediciones salieron de ejecutar esos pasos en vivo (2026-09-24), no de leer el repo:
@@ -1146,8 +1199,8 @@ prompt interactivo.
 ## 11. Dependencias
 
 Cada pin de esta sección viene textual del reporte de `stack-researcher` de esta sesión (2026-09-24)
-salvo donde se marca `UNVERIFIED` explícitamente — en ese caso, la razón de la elección se explica
-en `Purpose` en vez de implicar una verificación que no ocurrió.
+salvo donde se indica lo contrario; los pines de la lista nueva se re-verificaron contra el registro
+el 2026-10-26 (ver §20.3 #9).
 
 ### Runtime (existente, sin re-pinear — reportado tal cual está instalado, por procedencia del
 lockfile del repo)
@@ -1174,41 +1227,38 @@ lockfile del repo)
 | @types/react-dom | ^18.3.0 | `package-lock.json` del repo | 2026-09-24 | ya instalado | Tipos |
 | **@types/node** | **^20.14.2 → ^22.x (bump)** | ecosistema existente, bump por el plazo Vercel Node 20 (§1) | 2026-09-24 | **Paso 1** | Tipos de Node coherentes con el runtime objetivo |
 
-### Development — NUEVO en este blueprint (verificado en vivo por `stack-researcher` esta sesión)
+### Development — NUEVO en este blueprint (verificado contra el registro el 2026-10-26)
 
 | Paquete | Versión | Fuente | Verificado | Instalado por | Propósito |
 |---|---|---|---|---|---|
-| vitest | ^5.0.1 | `https://registry.npmjs.org/-/package/vitest/dist-tags` | 2026-09-24 | Paso 3 | Test runner |
-| @vitejs/plugin-react | ^6.1.1 | `https://registry.npmjs.org/-/package/@vitejs/plugin-react/dist-tags` | 2026-09-24 | Paso 3 | JSX/Fast Refresh para Vitest |
-| vite | ^8.3.1 | `https://registry.npmjs.org/-/package/vite/dist-tags` | 2026-09-24 | Paso 3 | Motor que Vitest usa por debajo |
-| @testing-library/react | ^16.3.3 | `https://registry.npmjs.org/-/package/@testing-library/react/dist-tags` | 2026-09-24 | Paso 3 | `render()`/`screen` en el smoke test del toolchain |
-| @testing-library/jest-dom | ^7.0.1 | `https://registry.npmjs.org/-/package/@testing-library/jest-dom/dist-tags` | 2026-09-24 | Paso 3 | Matchers DOM (`toBeInTheDocument`) cargados en `vitest.setup.ts` |
-| jsdom | ^30.1.1 | `https://registry.npmjs.org/-/package/jsdom/dist-tags` | 2026-09-24 | Paso 3 | Entorno DOM de `vitest.config.ts` |
-| @vitest/coverage-v8 | 5.0.1 (exacto — peerDependency exige coincidencia exacta con `vitest`) | `https://registry.npmjs.org/-/package/@vitest/coverage-v8/dist-tags` | 2026-09-24 | Paso 3 | `npm run test:coverage` |
-| supabase | 2.117.0 (exacto) | confirmado instalado vía `npx supabase --version` en esta máquina | 2026-09-24 | Paso 6 | CLI para `supabase start`/`db reset`/`status`, local y en CI |
+| vitest | ^5.0.5 | `https://registry.npmjs.org/-/package/vitest/dist-tags` | 2026-10-26 | Paso 3 | Test runner |
+| @vitejs/plugin-react | ^6.1.2 | `https://registry.npmjs.org/-/package/@vitejs/plugin-react/dist-tags` | 2026-10-26 | Paso 3 | JSX/Fast Refresh para Vitest |
+| vite | ^8.3.5 | `https://registry.npmjs.org/-/package/vite/dist-tags` | 2026-10-26 | Paso 3 | Motor que Vitest usa por debajo |
+| @testing-library/react | ^16.3.3 | `https://registry.npmjs.org/-/package/@testing-library/react/dist-tags` | 2026-10-26 | Paso 3 | `render()`/`screen` en el smoke test del toolchain |
+| @testing-library/jest-dom | ^7.0.1 | `https://registry.npmjs.org/-/package/@testing-library/jest-dom/dist-tags` | 2026-10-26 | Paso 3 | Matchers DOM (`toBeInTheDocument`) cargados en `vitest.setup.ts` |
+| @testing-library/dom | ^10.4.2 | `https://registry.npmjs.org/-/package/@testing-library/dom/dist-tags` — peer `^10` de `@testing-library/react` y `jest-dom` | 2026-10-26 | Paso 3 | Peer obligatorio de los dos paquetes de Testing Library |
+| jsdom | ^30.1.3 | `https://registry.npmjs.org/-/package/jsdom/dist-tags` | 2026-10-26 | Paso 3 | Entorno DOM de `vitest.config.ts` |
+| @vitest/coverage-v8 | 5.0.5 (exacto — peerDependency exige coincidencia exacta con `vitest`) | `https://registry.npmjs.org/-/package/@vitest/coverage-v8/dist-tags` | 2026-10-26 | Paso 3 | `npm run test:coverage` |
+| supabase | 2.122.0 (exacto) | `https://registry.npmjs.org/-/package/supabase/dist-tags` (changelog no leído) | 2026-10-26 | Paso 6 | CLI para `supabase start`/`db reset`/`status`, local y en CI |
 
 **Banderas de precaución, llevadas verbatim:** `@vitest/coverage-v8` tiene una peerDependency
 sobre `vitest` que exige coincidencia de versión **exacta**, no un rango — ambos están pineados a
-`5.0.1` idéntico. `jsdom@30.x` requiere Node `^22.22.2 || ^24.15.0 || >=26.0.0` (más estrecho que
+`5.0.5` idéntico. `jsdom@30.x` requiere Node `^22.22.2 || ^24.15.0 || >=26.0.0` (más estrecho que
 `vitest@5` por sí solo) — esta es la razón concreta por la que §10 declara el prerrequisito como
 `>= 22.22.2`, no simplemente "Node 22": cualquier Node 22 anterior al patch `22.22.2` haría fallar
 la instalación o el arranque de `jsdom` con un error de rango de motor. `actions/checkout@v7` y
 `actions/setup-node@v7` (node-version `'22'`) se usan en `.github/workflows/ci.yml` — ver §12.
 
-### Development — NUEVO en este blueprint, `UNVERIFIED` (ver "Versiones sin verificar" en el
-resumen de retorno de este blueprint)
+### Development — NUEVO en este blueprint (verificado contra el registro el 2026-10-26)
 
 | Paquete | Versión | Fuente | Verificado | Instalado por | Propósito |
 |---|---|---|---|---|---|
-| eslint | ^8.57.0 | `UNVERIFIED — no live-checked this session` — pineado a la última línea 8.x porque `eslint-config-next@14.x` excluye ESLint 9 en su peer range (config de estilo antiguo, no flat-config) | n/a — no verificado en vivo | Paso 2 | Motor de lint que `next lint` invoca |
-| eslint-config-next | 14.2.35 | `UNVERIFIED — no live-checked this session` — pineado al mismo valor exacto que la versión ya instalada de `next` (14.2.35), siguiendo la convención documentada de Next.js de hacer coincidir ambas versiones | n/a — no verificado en vivo | Paso 2 | Config de lint específica de Next.js que hace que `next lint` deje de requerir el prompt interactivo |
+| eslint | ^8.57.0 | `https://registry.npmjs.org/-/package/eslint/dist-tags` — la línea 8.x existe (8.57.1); `latest` es 10.13.0, pero `eslint-config-next@14.2.35` solo admite eslint 7 u 8 (config de estilo antiguo, no flat-config) | 2026-10-26 | Paso 2 | Motor de lint que `next lint` invoca |
+| eslint-config-next | 14.2.35 (exacto, hold) | `https://registry.npmjs.org/-/package/eslint-config-next/dist-tags` — mismo valor que la versión de `next` que este blueprint asume instalada (14.2.35); el repo de hoy ya está en `next` 15.5.26 y ahí hay que usar `eslint-config-next@15.5.26` (nunca subir uno sin el otro) | 2026-10-26 | Paso 2 | Config de lint específica de Next.js que hace que `next lint` deje de requerir el prompt interactivo |
 
-Estos dos pines quedan honestamente marcados como no verificados en vivo — `stack-researcher` no
-los resolvió esta sesión porque el hallazgo de que `next lint` nunca fue configurado surgió al leer
-el repo, después de que se fijara la lista de paquetes a investigar. Son seguros por convención
-documentada (coincidencia de versión con `next`, línea 8.x de ESLint por el peer range conocido de
-`eslint-config-next@14`), pero deben re-verificarse con `stack-researcher` antes de que el Paso 2
-corra `npm install`, si ha pasado tiempo desde la fecha de este blueprint.
+Refresh del 2026-10-26: los dos pines quedaron verificados contra el registro. `eslint-config-next`
+se mantiene en `14.2.35` (hold) porque debe coincidir con la versión de `next` que este blueprint
+asume instalada; no se sube de mayor sin subir `next` (no-objetivo de §1).
 
 ### CI (acciones de GitHub, pineadas por versión de release, no por semver de npm)
 
@@ -1263,7 +1313,7 @@ se documenta aquí para quien prefiera desplegar desde la terminal en vez del fl
 `.github/workflows/ci.yml` (§19.6, Paso 8 lo verifica localmente): en cada `push` a `main`/`master`
 y en cada `pull_request` — `actions/checkout@v7` → `actions/setup-node@v7` (Node 22, cache npm) →
 `npm ci` → `npm run lint` → `npx tsc --noEmit` → `npm run test` → `npm run test:integration`
-(Docker, Supabase local) → `npm run build`. Este es el mismo conjunto de comandos que §20.1 usa
+(Docker, Supabase local) → `npm run build`. Este es un subconjunto de los comandos que §20.1 usa
 como gate global — si un check está en el gate, está en CI, sin excepciones.
 
 El despliegue en sí (Vercel) es un pipeline **separado**, disparado por la integración Git de
@@ -1288,7 +1338,7 @@ Sin cambios — gestionados por Vercel, ya configurados antes de este blueprint.
 | Capa | Framework | Qué cubre | Dónde | Corre |
 |---|---|---|---|---|
 | Unitaria | Vitest 5 + jsdom + Testing Library | Lógica pura de mayor riesgo: firma HMAC (Paso 4), fecha/hora con zona horaria (Paso 5), upsert-sin-duplicado de calendario (Paso 7); toolchain smoke (Paso 3) | `tests/unit/**` | cada push/PR (CI) |
-| Integración | Vitest (`--environment node`) contra Supabase local real (Docker) | Las 7 funciones `SECURITY DEFINER` de transición de estado, ejercitadas contra Postgres real — el gate de capa de datos (Paso 6) | `tests/integration/**` | cada push/PR (CI) |
+| Integración | Vitest (`--environment node`) contra Supabase local real (Docker) | `submit_for_review` y `approve_content_piece` (2 de las 7 funciones `SECURITY DEFINER`), ejercitadas contra Postgres real — el gate de capa de datos (Paso 6) | `tests/integration/**` | cada push/PR (CI) |
 | E2E | Ninguno (diferido) | — | — | — |
 
 ### Flujos críticos que cubrir con E2E
@@ -1414,7 +1464,7 @@ segundos) en cada PR.
 
 | Skill | Pasos de build | Por qué | Instalación |
 |---|---|---|---|
-| `pdf` | ninguno en este blueprint | No aplica — este cambio no procesa PDFs | `/plugin marketplace add anthropics/skills` luego `/plugin install document-skills@anthropic-agent-skills` |
+| (ninguna) | — | Ninguna skill aplica: este cambio no procesa PDFs ni usa skills de build | — |
 
 Este blueprint es tooling/CI/pruebas puro sobre una app ya construida — no hay diseño visual
 (`ui-ux-pro-max`), extracción de contenido web (`agent-browser`), ni E2E de navegador
@@ -1554,13 +1604,13 @@ existente en `.gitignore`.
    `supabase/migrations/0001_init.sql` — es donde vive `status_history` y las notificaciones.
 2. Nunca expongas `SUPABASE_SERVICE_ROLE_KEY` a un componente cliente ni a un log.
 3. Nunca edites una migración ya aplicada (`0001_init.sql`, `0002_storage.sql`) — agrega una nueva.
-4. Nunca mockees la base de datos en `tests/integration/**` ni la Supabase local en
-   `tests/unit/**` reemplacen los mocks por llamadas reales.
+4. Nunca mockees la base de datos en `tests/integration/**`; en `tests/unit/**` nunca llames a la
+   Supabase local — usa mocks.
 5. Nunca marques una tarea terminada con el gate de comandos en rojo.
 6. Nunca commitees `.env`, `.env.local` ni ningún archivo con secretos reales.
 ```
 
-(88 líneas — bajo el tope de 200.)
+(118 líneas — bajo el tope de 200.)
 
 ### 19.2 `AGENTS.md`
 
@@ -1591,7 +1641,7 @@ Google Calendar y webhooks a Make. Next.js 14 + Supabase (Postgres/Auth/Storage/
 4. Nunca mockees Postgres en `tests/integration/**`.
 5. Nunca marques una tarea terminada con el gate en rojo.
 
-Arquitectura completa, límites entre capas y tokens de diseño: ver `CLAUDE.md` en este directorio.
+Arquitectura completa y límites entre capas: ver `CLAUDE.md` en este directorio.
 ```
 
 ### 19.3 `.claude/settings.json`
@@ -1601,7 +1651,8 @@ línea del gate global de §20.1 tiene una entrada correspondiente en `permissio
 `npm install`, `npm ci`, `npm run dev`, `npm run build`, `npm run typecheck`, `npm run lint`,
 `npm run test` (y sus variantes `test:watch`/`test:coverage`/`test:integration`),
 `npm run db:test:stop`, `npm start`, `npx tsc --noEmit`, `npx vitest`, `npx supabase`, el script de
-Node del Paso 6, cada `node -e` de verificación, y los comandos de `git` que usa cada Checkpoint.
+Node del Paso 6, `test`, `kill`, cada `node -e` de verificación y el `curl` del smoke (una entrada exacta por comando completo, sin
+comodín final: nunca un `node -e*` ni un prefijo abierto que aprobaría código arbitrario), y los comandos de `git` que usa cada Checkpoint.
 Denegado explícitamente: lectura de `.env`/`.env.local`/`.env.*.local`, `git push` (con y sin
 `--force`), y los dos comandos de Supabase que tocan un proyecto remoto (`db push`, `link`) — este
 blueprint solo usa Supabase **local**.
@@ -1663,10 +1714,17 @@ así que no hay un segundo call site que pudiera olvidarse de cargarlo.
 
 #### Matriz de convención de resolución
 
-`NOT APPLICABLE — este blueprint no declara ninguna convención de import/link nueva.` El alias
-`"@/*" → "./*"` ya existe en `tsconfig.json` antes de este blueprint, y `vitest.config.ts` lo
-espeja sin introducir una forma de especificador distinta ni una condición de export nueva — ver
-§3.
+Este blueprint no introduce una convención nueva, pero sí usa una existente: el alias `"@/*" → "./*"`
+de `tsconfig.json`, espejado en `vitest.config.ts`. Matriz por contexto:
+
+| Contexto que carga módulos del proyecto | Forma del import | Config que lo resuelve | Ajuste presente en el archivo |
+|---|---|---|---|
+| App (`next dev` / `next start`) | `@/…` | `tsconfig.json` → `paths` `"@/*": ["./*"]` | sí (preexistente) |
+| Build (`next build`) | `@/…` | `tsconfig.json` → `paths` | sí (preexistente) |
+| Typecheck (`tsc --noEmit`) | `@/…` | `tsconfig.json` → `paths` | sí (preexistente) |
+| Pruebas (Vitest, unitarias e integración) | `@/…`, `vi.mock('@/lib/supabase/server')` | `vitest.config.ts` → alias `@` → raíz del repo | sí — `vitest.config.ts:15` |
+| Script independiente (`scripts/write-supabase-test-env.mjs`) | ninguno — solo built-ins de Node | n/a | sí — no importa módulos del proyecto |
+| ESLint (`next lint`) | sin resolver de import propio | `.eslintrc.json` → `next/core-web-vitals` | n/a — no resuelve alias |
 
 #### Reconciliación de valores entre artefactos
 
@@ -1675,6 +1733,16 @@ espeja sin introducir una forma de especificador distinta ni una condición de e
 | Versión de Node | `package.json` → `engines.node` (Paso 1) | `22.x` | `.github/workflows/ci.yml` → `node-version: '22'` (§19.6, Bootstrap) · README.md "Despliegue en Vercel" (Paso 10) · Prerrequisitos §10 | sí — los tres se verifican en el `Verify` de los Pasos 1, 8 y 10 respectivamente, y §20.1 los re-verifica juntos |
 | Comando de pruebas unitarias | `package.json` → script `"test"` (Paso 3) | `vitest run tests/unit` | `.github/workflows/ci.yml` (invoca `npm run test`, nunca el comando crudo) · `CLAUDE.md` tabla de comandos · cada `Verify` de los Pasos 8, 20.1 | sí — todos invocan el script por nombre (`npm run test`), nunca duplican el comando crudo, así que no hay dos formas del mismo valor que puedan divergir |
 | Nombre del check de CI | `.github/workflows/ci.yml` → `jobs.test` | `test` (el job); el workflow se llama `CI` | README.md sección "## CI" (Paso 8, describe el nombre del check como `CI / test`) | sí — Paso 8 lee el YAML real antes de escribir el nombre en README, no lo inventa |
+| Puerto del servidor de la app | `next dev` / `next start` (default de Next.js) | `3000` | `scripts/write-supabase-test-env.mjs` (`NEXT_PUBLIC_APP_URL`) · `supabase/config.toml` (`site_url`, `additional_redirect_urls`) · el `curl` del Paso 10 y de §20.1 · `CLAUDE.md` (comandos y variables) | sí — los cinco literales son `3000`; ninguno se deriva de otro, así que un cambio de puerto exige editar los cinco |
+| Ruta del env de pruebas | `scripts/write-supabase-test-env.mjs` (valor por defecto de `process.argv[2]`) | `.env.test.local` | `vitest.setup.ts` (`loadEnvFile`) · `CLAUDE.md` · `.claude/rules/tests.md` | sí — los cuatro literales son `.env.test.local` |
+| Puerto de Postgres local | `supabase/config.toml` → `[db] port` | `54322` | `epics/02-integration-ci-deploy.md` (descripción del Bootstrap) | sí — el literal coincide en ambos |
+| Comandos de verificación con entrada de allowlist | §9 y §20.1 (los `Verify` y los comandos de gate) | cada `node -e …` y cada `curl …` literal | `tasks.json` (`verify`) · `epics/*.md` (Verify) · `.claude/settings.json` (entrada exacta `Bash(<comando completo>)`) | sí — 16 `node -e` y 2 `curl` comparados carácter a carácter; si se edita uno, se edita el otro |
+| Pines exactos dentro de comandos | §11 (Dependencias) | `eslint-config-next` 14.2.35 · `@vitest/coverage-v8` 5.0.5 · `supabase` 2.122.0 | Do del paso que instala · Verify (blueprint, `tasks.json`, epics) · entrada exacta del allowlist | sí — mismo literal en todos los lugares listados |
+| `eslint-config-next` = `next` | `package.json` → `next` (14.2.35 asumida por este blueprint) | `14.2.35` | §11 (fila de `eslint-config-next`) · Paso 2 · registro de riesgos | sí — los dos deben subir juntos |
+| Mecanismo de copia de Bootstrap | §10, Bootstrap paso 1 | `node -e` (copia recursiva sin sobreescribir) | §20.1 (re-ejecución) · `.claude/settings.json` (entrada exacta con el comando completo, sin comodín final) | sí — `rsync` fue eliminado de §20.1 y de la allowlist |
+| Script de entorno de pruebas | `scripts/write-supabase-test-env.mjs` (Paso 6) | `scripts/write-supabase-test-env.mjs` | script `test:integration` de `package.json` · `.claude/settings.json` (allowlist) · Pasos 6 y 10 · §20.1 · `.claude/rules/tests.md` · `CLAUDE.md` | sí — mismo literal en todos los lugares listados |
+| Setup de Vitest | `vitest.config.ts` → `setupFiles` | `vitest.setup.ts` | `tsconfig.json` (`exclude`, Paso 1) · `coverage.exclude` · globs de §19.5 | sí — mismo literal en todos los lugares listados |
+| Destino del env del smoke (Paso 10) | Paso 10, Do ítem 2 | `.env.production.local` | `tasks.json` E2-T5 · `epics/02` (E2-T1 y E2-T5) · §20.1 · `.gitignore` (patrón `.env*.local`) | sí — mismo literal en todos los lugares listados |
 | Puerto de Supabase local (API) | `supabase/config.toml` → `[api] port` | `54321` | generado dinámicamente en `.env.test.local` vía `npx supabase status -o json` (nunca escrito a mano en ningún otro archivo) | sí — como el puerto nunca se copia a mano a un segundo archivo (siempre se lee del propio `supabase status` en tiempo de ejecución), no hay una segunda copia que pueda desincronizarse |
 
 #### Reconciliación de artefactos byte-exactos
@@ -1703,14 +1771,20 @@ npm run typecheck                  # expect: exit 0, zero errors
 npm run lint                       # expect: exit 0, zero error-level findings
 npm run test                       # expect: exit 0, 0 failed, 0 skipped
 npm run test:integration           # expect: exit 0, 0 failed, 0 skipped — the data-layer gate
-npm run build                      # expect: exit 0
 npx supabase start                 # expect: exit 0 — see Paso 10: /login needs a live Supabase
-node scripts/write-supabase-test-env.mjs .env.local
+status=0; test -e .env.production.local || status=$?; test "$status" -eq 1
+                                    # expect: exit 0 — aborta si ya existe un .env.production.local del builder: este paso lo sobreescribe y lo borra sin respaldo
+node scripts/write-supabase-test-env.mjs .env.production.local
                                     # expect: exit 0 — local credentials, never production ones
-npm start & SERVER_PID=$!; sleep 3; CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/login); kill $SERVER_PID; test "$CODE" = 200
+npm run build                      # expect: exit 0 — mismo orden que el Paso 10: env, luego build
+status=0; curl -s -o /dev/null http://localhost:3000/ || status=$?; test "$status" -eq 7
+                                    # expect: exit 0 — el puerto 3000 está libre (curl sale 7); si no, el smoke podría contestar un servidor viejo
+npm start & SERVER_PID=$!; CODE=$(curl -s -o /dev/null -w '%{http_code}' --retry 15 --retry-delay 1 --retry-connrefused http://localhost:3000/login); kill $SERVER_PID; test "$CODE" = 200
                                     # expect: exit 0 — proves the built artifact the manifest
                                     #         declares is the one the build actually produced
-npx supabase stop                  # expect: exit 0 — cleanup
+npm run db:test:stop               # expect: exit 0 — cleanup
+node -e "require('fs').rmSync('.env.production.local',{force:true})"
+                                    # expect: exit 0 — borra el env efímero
 ```
 
 No hay línea de accesibilidad automatizada en este gate — ver §15, `NOT APPLICABLE`, mismo motivo
@@ -1724,17 +1798,18 @@ Más estas compuertas manuales, cada una revisada una vez antes de considerar el
       lo confirma, no lo crea de cero.
 - [ ] Cada archivo de la tabla "Archivos que deben estar commiteados" (§10) está presente en un
       checkout limpio: `git ls-files --error-unmatch <ruta>` sale 0 para cada uno (una invocación
-      por ruta), y `git check-ignore -q <ruta>; test $? -eq 1` sale 0 para cada uno (probando que
+      por ruta), y `status=0; git check-ignore -q <ruta> || status=$?; test "$status" -eq 1` sale 0 para cada uno (probando que
       ningún patrón del `.gitignore` lo atrapa — nunca `! git check-ignore -q a b`, que saldría 128
       por uso incorrecto con dos rutas, no por la propiedad real).
-- [ ] El `.gitignore` fue tocado por exactamente un paso de §9 — el Paso 3, que agrega `/coverage`
-      (ver §10). `git check-ignore -q coverage; test $? -eq 0` sale 0, y ningún otro paso lo
-      modificó.
+- [ ] El `.gitignore` fue tocado por exactamente dos pasos de §9 — el Paso 3, que agrega `/coverage`,
+      y el Paso 6, que agrega `supabase/.temp/` y `supabase/.branches/` (ver §10).
+      `git check-ignore -q coverage`, `git check-ignore -q supabase/.temp` y
+      `git check-ignore -q supabase/.branches` salen 0 (una invocación por ruta), y ningún otro paso
+      lo modificó.
 - [ ] `npm ci` fue re-corrido una vez sobre un árbol ya bootstrapeado (`git status --porcelain`
-      antes y después no cambia nada relevante), y la copia guardada de `workspace/` (§10, `rsync
-      --ignore-existing`) fue re-corrida una vez y salió 0 sin revertir ningún archivo editado por
+      antes y después es idéntico), y el bloque Bootstrap completo (§10) re-ejecutado sobre el árbol final sale 0 sin revertir ningún archivo editado por
       un paso (`package.json`, `tsconfig.json`, `.eslintrc.json`, `README.md` siguen con su
-      contenido post-Paso-10, no con el contenido original de `workspace/`).
+      contenido post-Paso-10, no con el que tenían antes del Paso 1).
 - [ ] Cada fila de la tabla "Reconciliación de valores entre artefactos" (§19.6) lee `Comparado:
       sí`.
 - [ ] §9.1 es `NOT APPLICABLE` — confirmado, no hay parity/cutover que ejercitar.
@@ -1755,7 +1830,7 @@ la próxima advertencia real se esconde dentro de ella.
 | Supabase local (Docker) puede no estar disponible en todos los runners de CI por defecto | Baja | Alto (bloquearía el gate de capa de datos en CI) | El job `test:integration` falla en `supabase start`, no en una aserción | Los runners `ubuntu-latest` de GitHub Actions traen Docker preinstalado — compatibilidad confirmada; si algún día se cambia de runner, esta fila es la primera en revisarse |
 | Manejo del secreto HMAC: el secreto del webhook nunca debe aparecer en un bundle de cliente ni en logs | Baja | Alto | Un secreto real apareciendo en un log de CI o en un mensaje de commit | El código existente ya mantiene el secreto solo en servidor/base de datos (según el README); las pruebas nuevas (Paso 4) usan un secreto de fixture, nunca el real, y ninguna aserción lo imprime a stdout |
 | `next/core-web-vitals` revela hallazgos de nivel `error` en código nunca antes linteado (Paso 2) | Media | Bajo | `npm run lint` sale distinto de 0 la primera vez que corre en el Paso 2 | El Paso 2 permite corregir esos hallazgos como cambios mínimos no conductuales (key faltante, import sin usar); si el volumen fuera grande, es señal para dividir el Paso 2 en dos antes de continuar |
-| Los pines de `eslint`/`eslint-config-next` están marcados `UNVERIFIED` (§11) | Baja | Medio (instalación fallida en el Paso 2) | `npm install -D eslint@^8.57.0 eslint-config-next@14.2.35` falla o resuelve una combinación con conflicto de peer | Re-correr `stack-researcher` sobre estos dos paquetes específicamente antes de ejecutar el Paso 2, si ha pasado tiempo desde la fecha de este blueprint |
+| `eslint-config-next@14.2.35` ya no coincide con el `next` del repo (el repo de hoy está en `next` 15.5.26) | Alta si el bundle se re-ejecuta sobre el repo actual | Medio (el Verify del Paso 2 falla y `next lint` queda mal configurado) | `npm install -D -E eslint-config-next@14.2.35` sobre `next` 15.x produce una combinación fuera de convención | Antes de re-ejecutar este bundle sobre el repo actual, subir ese pin y el Verify del Paso 2 a `15.5.26` (la versión de `next` instalada); nunca subir uno sin el otro |
 | El plazo de deprecación de Node 20 en Vercel (2026-10-01) es en 7 días desde la fecha de este blueprint | Alta (el plazo es fijo) | Alto si no se cumple (nuevos despliegues podrían rechazarse en Vercel) | Cualquier intento de deploy en Vercel con Node 20 fijado después del plazo | Los Pasos 1 y 10 fijan Node 22 en `package.json` y documentan el ajuste del dashboard de Vercel; priorizar completar el Paso 10 antes del 2026-10-01 |
 
 ### 20.3 Bitácora de decisiones
@@ -1767,9 +1842,10 @@ la próxima advertencia real se esconde dentro de ella.
 | 3 | Prueba de integración contra Supabase local real (Docker) en vez de mockear Postgres | Mockear `supabase-js` en la prueba de "integración" también | Las funciones `SECURITY DEFINER` son la lógica de autorización real del producto — un mock de Postgres no las ejercitaría en absoluto, dejando el riesgo más alto del sistema sin cubrir | Si algún día la lógica de autorización se moviera fuera de Postgres a la capa de aplicación |
 | 4 | Diferir E2E con Playwright | Agregar Playwright ahora junto con Vitest | Costo de mantenimiento alto para un cambio cuyo objetivo es cerrar brechas de higiene rápido; la combinación integración+CI ya cubre el riesgo más alto a menor costo | Una regresión llega a producción sin haber sido detectada por la suite actual (criterio explícito del no-objetivo en §1) |
 | 5 | ESLint (`next/core-web-vitals`) en vez de migrar a Biome | Biome, como recomienda el track `ts-node` para proyectos nuevos | El repo usa Tailwind v3 (config JS) y `next lint` ya definido en `package.json`; migrar el linter es un cambio de tooling no solicitado y fuera del alcance aditivo de este blueprint | Un blueprint futuro decidiera migrar el stack de estilos/lint completo |
-| 6 | `eslint`/`eslint-config-next` pineados por convención documentada, marcados `UNVERIFIED` en vez de bloquear la generación de este blueprint | Detener el blueprint entero pidiendo una verificación en vivo de estos dos paquetes | El hallazgo de que `next lint` nunca fue configurado surgió leyendo el repo, después de fijada la lista de paquetes a investigar en esta sesión; un pin por convención documentada y honestamente marcado es preferible a bloquear todo el blueprint por dos paquetes de bajo riesgo | `stack-researcher` verificara estos dos pines y encontrara un conflicto real |
+| 6 | `eslint` ^8.57.0 y `eslint-config-next` 14.2.35 pineados a la línea de `next` 14 que este blueprint asume instalada (verificados contra el registro el 2026-10-26) | Subir a `eslint` 10 o `eslint-config-next` 15/16 | `eslint-config-next` debe igualar a `next`, y subir `next` de mayor es un no-objetivo (§1); `eslint-config-next@14.2.35` solo admite eslint 7 u 8 | El repo se migre a `next` 15 (hoy ya lo está): entonces `eslint-config-next@15.5.26`, que admite eslint 8 y 9 |
 | 7 | Cargador de `.env` casero en `vitest.setup.ts` en vez de agregar `dotenv` como dependencia | `dotenv` | Evita una dependencia nueva sin verificar en vivo para una tarea de 15 líneas; cero superficie de cadena de suministro adicional | El proyecto necesitara parsing de `.env` más sofisticado (variables anidadas, interpolación) en el futuro |
-| 8 | El health-check de `/login` del Paso 10 corre contra la Supabase **local** (reutilizando el script del Paso 6 con destino `.env.local`) | Exigir que quien construya ya tenga un `.env.local` de producción configurado a mano antes del Paso 10 | Encontrado ejecutando el smoke-test de este blueprint en vivo: `middleware.ts` construye un cliente de Supabase en cada request y responde 500 sin credenciales reales — el chequeo original habría fallado en cualquier checkout limpio. Reutilizar la Supabase local (ya requerida por el Paso 6) hace el Paso 10 autocontenido, sin depender de un secreto de producción que el blueprint no puede proveer | Si `middleware.ts` alguna vez dejara de requerir Supabase en cada request (cambio de arquitectura fuera de alcance de este blueprint) |
+| 8 | El health-check de `/login` del Paso 10 corre contra la Supabase **local** (reutilizando el script del Paso 6 con destino `.env.production.local`, que se borra al terminar) | Exigir que quien construya ya tenga un `.env.local` de producción configurado a mano antes del Paso 10 | Encontrado ejecutando el smoke-test de este blueprint en vivo: `middleware.ts` construye un cliente de Supabase en cada request y responde 500 sin credenciales reales — el chequeo original habría fallado en cualquier checkout limpio. Reutilizar la Supabase local (ya requerida por el Paso 6) hace el Paso 10 autocontenido, sin depender de un secreto de producción que el blueprint no puede proveer | Si `middleware.ts` alguna vez dejara de requerir Supabase en cada request (cambio de arquitectura fuera de alcance de este blueprint) |
+| 9 | Refresh de pines del 2026-10-26: `vitest` ^5.0.5, `@vitest/coverage-v8` 5.0.5, `vite` ^8.3.5, `@vitejs/plugin-react` ^6.1.2, `jsdom` ^30.1.3, `supabase` 2.122.0, y se agrega `@testing-library/dom` ^10.4.2 | Subir `eslint` a 10 y `eslint-config-next` a 15/16 | Deriva del registro verificada el 2026-10-26; `@vitest/coverage-v8` exige coincidencia exacta con `vitest` y `vitest ^5.0.1` ya resolvía a 5.0.5. `eslint` 10 no lo admite ninguna `eslint-config-next` 14/15, y `eslint-config-next` debe igualar a `next` | El cambio de `supabase` de 2.117.0 a 2.122.0 resultara costoso (no se leyó su changelog) |
 
 ### 20.4 Qué construir después
 

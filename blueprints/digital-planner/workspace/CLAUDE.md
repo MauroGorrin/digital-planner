@@ -112,7 +112,7 @@ existente en `.gitignore`.
    `supabase/migrations/0001_init.sql` — es donde vive `status_history` y las notificaciones.
 2. Nunca expongas `SUPABASE_SERVICE_ROLE_KEY` a un componente cliente ni a un log.
 3. Nunca edites una migración ya aplicada (`0001_init.sql`, `0002_storage.sql`) — agrega una nueva.
-4. Nunca mockees la base de datos en `tests/integration/**` ni la Supabase local en
-   `tests/unit/**` reemplacen los mocks por llamadas reales.
+4. Nunca mockees la base de datos en `tests/integration/**`; en `tests/unit/**` nunca llames a la
+   Supabase local — usa mocks.
 5. Nunca marques una tarea terminada con el gate de comandos en rojo.
 6. Nunca commitees `.env`, `.env.local` ni ningún archivo con secretos reales.
